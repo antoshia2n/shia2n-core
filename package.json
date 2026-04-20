@@ -1,0 +1,14 @@
+{
+  "name": "shia2n-core",
+  "version": "1.0.0",
+  "description": "Shared modules for Naoki's app ecosystem (AuthGuard, firebase, supabase, tokens, styles)",
+  "main": "./index.js",
+  "type": "module",
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "firebase": "^10.0.0",
+    "@supabase/supabase-js": "^2.0.0",
+    "lucide-react": "^0.383.0"
+  }
+}
