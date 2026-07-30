@@ -89,6 +89,8 @@ VITE_FIREBASE_APP_ID
 VITE_FIREBASE_DATABASE_ID
 ```
 
+出入り口を使うアプリは、これに加えて `VITE_DB_GATEWAY`（平文）と `SUPABASE_SERVICE_ROLE_KEY`（Secret）を設定する。
+
 ---
 
 ## 必須の Vite 設定（アプリ側）
@@ -113,13 +115,65 @@ export default defineConfig({
 
 ---
 
+## データの出入り口（2026-07-30 決定「画面は公開キーでデータベースに直接触らない」）
+
+表の読み書きを、Supabase へ直結せず **自分のアプリのサーバー経由** にする仕組み。
+呼び出し側のコードは一切変えない（接続の向き先だけが変わる）。
+
+**設定したアプリだけが新方式になる。** `VITE_DB_GATEWAY` を設定していないアプリはこれまで通り直結で動く。
+
+### 経由するもの・しないもの
+
+| 対象 | 経路 |
+|---|---|
+| 表の読み書き・データベース関数 | アプリのサーバー経由（管理者キーはサーバーだけが持つ） |
+| 添付ファイルの置き場（Storage） | これまで通り直結（別途対応） |
+
+### アプリ側の入れ方（2手順）
+
+**1. 受け皿を1ファイル置く** — `functions/api/db/[[path]].js`
+
+```js
+import { createDbGateway } from "shia2n-core/server/db-gateway.js";
+
+export const onRequest = createDbGateway({
+  basePath:  "/api/db",
+  tables:    { sw_swipes: { owner: "user_id" }, sw_zeus_orphans: { owner: "user_id" } },
+  functions: ["sw_increment_ref"],
+});
+```
+
+**2. Cloudflare Pages に設定を足す**
+
+| 名前 | 種別 | 値 |
+|---|---|---|
+| `VITE_DB_GATEWAY` | 平文 | `/api/db` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Secret | Supabase の service role キー |
+
+`_routes.json` の `include` に `/api/*` が入っていること。
+
+### 出入り口が守っていること
+
+1. ログイン済みの証明を毎回サーバーで照合する（画面からの `user_id` の自己申告は使わない）
+2. `tables` / `functions` に書いた分だけ通す
+3. 読み書きの条件に本人の印を強制で足す（追加時は本人の印で上書き、更新時は持ち主の変更を拒否）
+4. 別の表を巻き込んで取り出す書き方を拒否する
+5. 管理者キーはサーバーだけが持つ
+
+### 診断
+
+`checkDbGateway(env)` で設定の有無とログイン確認の準備可否だけを返す（値は返さない）。
+
+---
+
 ## エクスポート一覧
 
 | カテゴリ | エクスポート |
 |---|---|
 | Auth | `AuthGuard`, `useAuthUid`, `useAuthUser` |
 | Firebase | `auth`, `db`, `firebaseApp` |
-| Supabase | `supabase`, `fetchAll`, `fetchOne`, `insertOne`, `updateOne`, `deleteOne`, `upsertOne` |
+| Supabase | `supabase`, `fetchAll`, `fetchOne`, `insertOne`, `updateOne`, `deleteOne`, `upsertOne`, `dbGatewayEnabled`, `dbGatewayPath` |
+| 出入り口（サーバー） | `shia2n-core/server/db-gateway.js` の `createDbGateway`, `verifyIdToken`, `checkDbGateway` |
 | Tokens | `T`, `fmt`, `fmtK`, `currentMonth`, `today`, `p2`, `clamp` |
 | Styles | `card`, `lb10`, `mc`, `inp`, `solidBtn`, `ghostBtn`, `mono` |
 | Components | `Delta` |

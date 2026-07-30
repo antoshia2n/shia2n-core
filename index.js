@@ -11,6 +11,7 @@ export {
   fetchAll, fetchOne,
   insertOne, updateOne, deleteOne,
   upsertOne,
+  dbGatewayEnabled, dbGatewayPath,
 } from "./lib/supabase.js";
 
 // Design tokens & utils
