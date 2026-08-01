@@ -150,14 +150,26 @@ export async function verifyIdToken(token, projectId) {
 /**
  * @param {object}   options
  * @param {string}   options.basePath   受け口のパス（例 "/api/db"）
- * @param {object}   options.tables     触ってよい表 { 表名: { owner: "user_id" } }
+ * @param {object}   options.tables     触ってよい表
+ *   - 利用者ごとに分ける表： { 表名: { owner: "user_id" } }（既定）
+ *   - 分けない表（管理者だけが使うもの）： { 表名: { owner: null } }
+ *     owner を null にした表では、本人の印での絞り込みも押印も行わない。
+ *     必ず allowUids と併用すること（誰でも全件触れる状態になるため）。
  * @param {string[]} options.functions  呼んでよいデータベース関数の名前
+ * @param {string[]} options.allowUids  ここに挙げた利用者だけ通す。空なら全員通す。
  */
-export function createDbGateway({ basePath = "/api/db", tables = {}, functions = [] } = {}) {
-  const base = basePath.replace(/\/+$/, "");
+export function createDbGateway({
+  basePath = "/api/db",
+  tables = {},
+  functions = [],
+  allowUids = [],
+} = {}) {
+  const base       = basePath.replace(/\/+$/, "");
+  const allowList  = Array.isArray(allowUids) ? allowUids.filter(Boolean) : [];
 
   return async function onRequest(context) {
     const { request, env } = context;
+
 
     try {
       const supabaseUrl = (env.SUPABASE_URL ?? env.VITE_SUPABASE_URL ?? "").replace(/\/+$/, "");
@@ -192,6 +204,10 @@ export function createDbGateway({ basePath = "/api/db", tables = {}, functions =
       if (!token) throw new GatewayError(401, "ログインが必要です。");
       const uid = await verifyIdToken(token, projectId);
 
+      if (allowList.length && !allowList.includes(uid)) {
+        throw new GatewayError(403, "この利用者にはこの画面のデータを扱う許可がありません。");
+      }
+
       // ── 2. 触ってよいものかを確かめる ──────────────────────────────────
       let targetPath;
       let ownerColumn = null;
@@ -207,7 +223,10 @@ export function createDbGateway({ basePath = "/api/db", tables = {}, functions =
         if (segments.length !== 1 || !Object.prototype.hasOwnProperty.call(tables, table)) {
           throw new GatewayError(403, "この表には触れません。");
         }
-        ownerColumn = tables[table]?.owner ?? "user_id";
+        const conf  = tables[table] ?? {};
+        ownerColumn = Object.prototype.hasOwnProperty.call(conf, "owner")
+          ? conf.owner            // null を指定したら絞り込みも押印もしない
+          : "user_id";
         targetPath  = table;
       }
 
@@ -238,6 +257,7 @@ export function createDbGateway({ basePath = "/api/db", tables = {}, functions =
             throw new GatewayError(400, "送信内容を読み取れませんでした。");
           }
           const stamp = row => {
+            if (!ownerColumn) return row;   // 分けない表はそのまま通す
             const next = { ...row };
             if (method === "POST") next[ownerColumn] = uid;
             else delete next[ownerColumn];
