@@ -143,6 +143,27 @@ export const onRequest = createDbGateway({
 });
 ```
 
+#### 表ごとの締めつけ（任意）
+
+`tables` の各表には、次の設定を足せる。書かなければ従来どおりの動きになる。
+
+| 設定 | 書き方 | 動き |
+|---|---|---|
+| 持ち主で分ける | `{ owner: "user_id" }` | 本人の行だけに絞る（既定）。`null` で分けない |
+| 読み取り専用 | `{ readOnly: true }` | 取り出す以外の操作を断る |
+| 決まった絞り込み | `{ force: { is_active: "eq.true" } }` | 取り出し・書き換え・削除に必ずこの条件を足す |
+
+利用者を絞れないアプリ（ログインさえすれば誰でも入れる画面）で、持ち主で分けられないマスタ表を扱うときに使う。
+
+```js
+tables: {
+  members_decrypted:       { owner: "firebase_uid" },
+  plan_entitlement_matrix: { owner: null, readOnly: true, force: { is_active: "eq.true" } },
+}
+```
+
+`force` を書いた表に新しい行を作るときは、同じ値が強制的に入る（絞り込みの外側に行を作れないようにするため）。`eq.` 以外の条件を書いた表では、入れる値が決まらないため作成を断る。
+
 **2. Cloudflare Pages に設定を足す**
 
 | 名前 | 種別 | 値 |

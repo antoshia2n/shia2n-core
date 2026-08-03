@@ -145,6 +145,26 @@ export async function verifyIdToken(token, projectId) {
   return payload.sub;
 }
 
+/**
+ * 「決まった絞り込み」を、新しい行に入れる値へ読み替える。
+ * eq.〜 の形だけを扱う。それ以外は入れるべき値が1つに決まらないため作成を断る。
+ */
+function forcedInsertValue(column, condition) {
+  const raw = String(condition ?? "");
+  if (!raw.startsWith("eq.")) {
+    throw new GatewayError(
+      403,
+      "この表には新しい行を作れません。",
+      `${column} の条件が eq. 以外のため、作成時に入れる値を決められません。`,
+    );
+  }
+  const value = raw.slice(3);
+  if (value === "true")  return true;
+  if (value === "false") return false;
+  if (value === "null")  return null;
+  return value;
+}
+
 /* ── 本体 ────────────────────────────────────────────────────────────────── */
 
 /**
@@ -154,7 +174,14 @@ export async function verifyIdToken(token, projectId) {
  *   - 利用者ごとに分ける表： { 表名: { owner: "user_id" } }（既定）
  *   - 分けない表（管理者だけが使うもの）： { 表名: { owner: null } }
  *     owner を null にした表では、本人の印での絞り込みも押印も行わない。
- *     必ず allowUids と併用すること（誰でも全件触れる状態になるため）。
+ *     必ず allowUids か、下の readOnly / force と併用すること。
+ *   - 読み取り専用： { 表名: { readOnly: true } }
+ *     取り出す以外の操作をこの時点で断る。
+ *   - 決まった絞り込み： { 表名: { force: { is_active: "eq.true" } } }
+ *     取り出し・書き換え・削除に必ずこの条件を足す。画面が外しても効く。
+ *     新しい行を作るときは、同じ値を強制的に入れて絞り込みの内側に置く。
+ *     eq. 以外の条件を書いた表では、入れる値が決まらないため作成を断る。
+ *   readOnly / force はどちらも任意。書かなければ従来どおりの動きになる。
  * @param {string[]} options.functions  呼んでよいデータベース関数の名前
  * @param {string[]} options.allowUids  ここに挙げた利用者だけ通す。空なら全員通す。
  */
@@ -211,6 +238,7 @@ export function createDbGateway({
       // ── 2. 触ってよいものかを確かめる ──────────────────────────────────
       let targetPath;
       let ownerColumn = null;
+      let forceFilter = null;
 
       if (isRpc) {
         const fn = segments[1] ?? "";
@@ -228,6 +256,15 @@ export function createDbGateway({
           ? conf.owner            // null を指定したら絞り込みも押印もしない
           : "user_id";
         targetPath  = table;
+
+        // 読み取り専用の表は、取り出す以外の操作をここで断る
+        if (conf.readOnly === true && method !== "GET" && method !== "HEAD") {
+          throw new GatewayError(403, "この表は読み取り専用です。");
+        }
+
+        // 決まった絞り込み（例：使用中の行だけ）
+        forceFilter =
+          conf.force && typeof conf.force === "object" ? conf.force : null;
       }
 
       // ── 3. 本人の分だけに絞る ──────────────────────────────────────────
@@ -244,6 +281,15 @@ export function createDbGateway({
         params.append(ownerColumn, `eq.${uid}`);
       }
 
+      // 決まった絞り込みを足す。画面が同じ列を送ってきても、条件が並ぶと
+      // 「両方を満たすもの」になるため、緩められることはない。
+      // 新しい行を作るときは絞り込みが効かないので、下で値を押印する。
+      if (forceFilter && method !== "POST") {
+        for (const [column, condition] of Object.entries(forceFilter)) {
+          params.append(column, condition);
+        }
+      }
+
       let body;
       if (method === "POST" || method === "PATCH") {
         const raw = await request.text();
@@ -257,10 +303,16 @@ export function createDbGateway({
             throw new GatewayError(400, "送信内容を読み取れませんでした。");
           }
           const stamp = row => {
-            if (!ownerColumn) return row;   // 分けない表はそのまま通す
             const next = { ...row };
-            if (method === "POST") next[ownerColumn] = uid;
-            else delete next[ownerColumn];
+            if (ownerColumn) {
+              if (method === "POST") next[ownerColumn] = uid;
+              else delete next[ownerColumn];
+            }
+            if (forceFilter && method === "POST") {
+              for (const [column, condition] of Object.entries(forceFilter)) {
+                next[column] = forcedInsertValue(column, condition);
+              }
+            }
             return next;
           };
           body = JSON.stringify(Array.isArray(parsed) ? parsed.map(stamp) : stamp(parsed));
