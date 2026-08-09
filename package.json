@@ -1,7 +1,7 @@
 {
   "name": "shia2n-core",
-  "version": "1.4.0",
-  "description": "Shared modules for Naoki's app ecosystem (AuthGuard, firebase, supabase, db-gateway, tokens, styles)",
+  "version": "1.5.0",
+  "description": "Shared modules for Naoki's app ecosystem (AuthGuard, firebase, supabase, db-gateway, storage-gateway, tokens, styles)",
   "main": "./index.js",
   "type": "module",
   "peerDependencies": {

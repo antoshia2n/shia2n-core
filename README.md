@@ -127,7 +127,8 @@ export default defineConfig({
 | 対象 | 経路 |
 |---|---|
 | 表の読み書き・データベース関数 | アプリのサーバー経由（管理者キーはサーバーだけが持つ） |
-| 添付ファイルの置き場（Storage） | これまで通り直結（別途対応） |
+| 添付ファイルの置き場（Storage）への保存 | アプリのサーバー経由（下の「置き場の出入り口」を見る） |
+| 添付ファイルの置き場（Storage）からの取り出し | これまで通り直結（置き場は公開のまま） |
 
 ### アプリ側の入れ方（2手順）
 
@@ -201,6 +202,73 @@ tables: {
 
 ---
 
+## 置き場の出入り口（2026-08-09 追加）
+
+添付ファイルを置き場へ**保存する**ときだけ、Supabase へ直結せず **自分のアプリのサーバー経由** にする仕組み。
+取り出し（表示）は通らない。置き場は公開のままにしてあるため、画面はこれまで通り公開の住所で表示する。
+
+守るのは「見られないこと」ではなく「**勝手に置かれない・消されない**こと」。
+
+### アプリ側の入れ方（2手順）
+
+**1. 受け皿を1ファイル置く** — `functions/api/storage/upload.js`
+
+```js
+import { createStorageGateway } from "shia2n-core/server/storage-gateway.js";
+
+export const onRequestPost = createStorageGateway({
+  buckets: {
+    contentos: { prefix: "images/" },
+  },
+});
+```
+
+**2. 画面から呼ぶ**
+
+```js
+const token = await auth.currentUser.getIdToken();
+const res = await fetch(
+  `/api/storage/upload?bucket=contentos&name=${encodeURIComponent(file.name)}`,
+  {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": file.type },
+    body: file,
+  },
+);
+const out = await res.json();   // { ok: true, bucket: "contentos", path: "images/1754..._abc.jpg" }
+```
+
+返ってくるのは保存先の名前（`path`）だけ。表示用の住所は画面側で
+`supabase.storage.from(bucket).getPublicUrl(out.path)` から作る。
+
+### 入れ物ごとの設定（すべて任意）
+
+| 設定 | 既定 | 動き |
+|---|---|---|
+| `prefix` | `""` | 保存先の頭に付ける文字列（例 `images/`） |
+| `maxBytes` | 50MB | これより大きいファイルを断る |
+| `extensions` | `jpg / jpeg / png / gif / webp / avif` | これ以外の拡張子を断る |
+| `contentTypePrefix` | `image/` | これ以外の種類を断る |
+
+`allowUids` に利用者を並べると、その人たちだけが置けるようになる（空なら全員）。
+
+### 出入り口が守っていること
+
+1. ログイン済みの証明を毎回サーバーで照合する
+2. `buckets` に書いた入れ物だけを通す
+3. 決めた種類・大きさだけを通す
+4. **保存先の名前はサーバーが決める**（画面が決めた名前は使わないため、既に置いてあるファイルを上書きできない）
+5. 管理者キーはサーバーだけが持つ
+
+置き場の側は、書き込みと削除の許可から公開キーとログイン済みキーを外しておくこと。
+外さないと、この口を通らずに直接置ける道が残る。
+
+### 診断
+
+`checkStorageGateway(env)` で設定の有無だけを返す（値は返さない）。
+
+---
+
 ## エクスポート一覧
 
 | カテゴリ | エクスポート |
@@ -209,6 +277,7 @@ tables: {
 | Firebase | `auth`, `db`, `firebaseApp` |
 | Supabase | `supabase`, `fetchAll`, `fetchOne`, `insertOne`, `updateOne`, `deleteOne`, `upsertOne`, `dbGatewayEnabled`, `dbGatewayPath` |
 | 出入り口（サーバー） | `shia2n-core/server/db-gateway.js` の `createDbGateway`, `verifyIdToken`, `checkDbGateway` |
+| 置き場の出入り口（サーバー） | `shia2n-core/server/storage-gateway.js` の `createStorageGateway`, `checkStorageGateway` |
 | Tokens | `T`, `fmt`, `fmtK`, `currentMonth`, `today`, `p2`, `clamp` |
 | Styles | `card`, `lb10`, `mc`, `inp`, `solidBtn`, `ghostBtn`, `mono` |
 | Components | `Delta` |
