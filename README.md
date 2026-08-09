@@ -139,9 +139,22 @@ import { createDbGateway } from "shia2n-core/server/db-gateway.js";
 export const onRequest = createDbGateway({
   basePath:  "/api/db",
   tables:    { sw_swipes: { owner: "user_id" }, sw_zeus_orphans: { owner: "user_id" } },
-  functions: ["sw_increment_ref"],
+  functions: { sw_increment_ref: { owner: "p_user_id" } },
 });
 ```
+
+#### 関数ごとの締めつけ（任意）
+
+`functions` は2つの書き方を受け付ける。
+
+| 書き方 | 動き |
+|---|---|
+| `["sw_increment_ref"]` | 名前が一覧にあるかだけを見て、送られてきた中身をそのまま渡す（従来どおり） |
+| `{ sw_increment_ref: { owner: "p_user_id" } }` | 送信内容の `p_user_id` を、サーバーで確定した本人の印で必ず上書きする |
+
+`owner` を書いた関数では、画面が他人の印を入れて送ってきても捨てられる。ただし**関数の側も直すこと**。引数を受け取るだけで絞り込まない関数のままだと、印が増えるだけで他人の行に届いてしまう。関数の側は「その引数と一致する行だけ」を対象にする。
+
+`owner` を書いた関数は、送信内容を差し替える必要があるため POST だけを通す。
 
 #### 表ごとの締めつけ（任意）
 
@@ -178,8 +191,9 @@ tables: {
 1. ログイン済みの証明を毎回サーバーで照合する（画面からの `user_id` の自己申告は使わない）
 2. `tables` / `functions` に書いた分だけ通す
 3. 読み書きの条件に本人の印を強制で足す（追加時は本人の印で上書き、更新時は持ち主の変更を拒否）
-4. 別の表を巻き込んで取り出す書き方を拒否する
-5. 管理者キーはサーバーだけが持つ
+4. `owner` を書いた関数呼び出しは、送信内容の印を本人の印で上書きする
+5. 別の表を巻き込んで取り出す書き方を拒否する
+6. 管理者キーはサーバーだけが持つ
 
 ### 診断
 

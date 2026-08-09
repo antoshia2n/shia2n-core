@@ -182,7 +182,14 @@ function forcedInsertValue(column, condition) {
  *     新しい行を作るときは、同じ値を強制的に入れて絞り込みの内側に置く。
  *     eq. 以外の条件を書いた表では、入れる値が決まらないため作成を断る。
  *   readOnly / force はどちらも任意。書かなければ従来どおりの動きになる。
- * @param {string[]} options.functions  呼んでよいデータベース関数の名前
+ * @param {string[]|object} options.functions  呼んでよいデータベース関数
+ *   - 従来どおりの書き方（名前だけ）： ["sw_increment_ref"]
+ *     名前が一覧にあるかどうかだけを見て、送られてきた中身をそのまま渡す。
+ *   - 本人の印を強制する書き方： { sw_increment_ref: { owner: "p_user_id" } }
+ *     呼び出しの中身にある owner の引数を、こちらで確定した本人の印で必ず上書きする。
+ *     画面が別の値を入れて送ってきても捨てる。関数の側は、その引数と一致する行だけを
+ *     対象にすること（関数を直さないと、引数が増えるだけで絞り込みは効かない）。
+ *     この書き方をした関数は、中身を差し替える必要があるため POST だけを通す。
  * @param {string[]} options.allowUids  ここに挙げた利用者だけ通す。空なら全員通す。
  */
 export function createDbGateway({
@@ -193,6 +200,13 @@ export function createDbGateway({
 } = {}) {
   const base       = basePath.replace(/\/+$/, "");
   const allowList  = Array.isArray(allowUids) ? allowUids.filter(Boolean) : [];
+
+  // 関数の設定は2つの書き方を受け付ける。どちらも同じ形（名前 → 設定）に揃えてから使う。
+  //   ["sw_increment_ref"]                        → { sw_increment_ref: {} }
+  //   { sw_increment_ref: { owner: "p_user_id" } } → そのまま
+  const functionConf = Array.isArray(functions)
+    ? Object.fromEntries(functions.filter(Boolean).map(name => [name, {}]))
+    : (functions && typeof functions === "object" ? functions : {});
 
   return async function onRequest(context) {
     const { request, env } = context;
@@ -239,11 +253,26 @@ export function createDbGateway({
       let targetPath;
       let ownerColumn = null;
       let forceFilter = null;
+      let rpcOwnerArg = null;
 
       if (isRpc) {
         const fn = segments[1] ?? "";
-        if (segments.length !== 2 || !functions.includes(fn)) {
+        if (
+          segments.length !== 2 ||
+          !Object.prototype.hasOwnProperty.call(functionConf, fn)
+        ) {
           throw new GatewayError(403, "この処理は許可されていません。");
+        }
+        const conf  = functionConf[fn] ?? {};
+        rpcOwnerArg = typeof conf.owner === "string" && conf.owner ? conf.owner : null;
+
+        // 本人の印を入れる関数は、中身を差し替える必要があるため POST だけを通す
+        if (rpcOwnerArg && method !== "POST") {
+          throw new GatewayError(
+            403,
+            "この処理はこの呼び出し方では通せません。",
+            `${fn} は本人の確認が要るため POST で呼んでください。`,
+          );
         }
         targetPath = `rpc/${fn}`;
       } else {
@@ -294,7 +323,21 @@ export function createDbGateway({
       if (method === "POST" || method === "PATCH") {
         const raw = await request.text();
         if (isRpc) {
-          body = raw;
+          if (!rpcOwnerArg) {
+            body = raw;
+          } else {
+            // 本人の印を押す。画面が同じ引数を送ってきても、こちらの値で必ず上書きする。
+            let parsed;
+            try {
+              parsed = raw ? JSON.parse(raw) : {};
+            } catch {
+              throw new GatewayError(400, "送信内容を読み取れませんでした。");
+            }
+            if (Array.isArray(parsed) || parsed === null || typeof parsed !== "object") {
+              throw new GatewayError(400, "この処理の送信内容の形が想定と異なります。");
+            }
+            body = JSON.stringify({ ...parsed, [rpcOwnerArg]: uid });
+          }
         } else {
           let parsed;
           try {
