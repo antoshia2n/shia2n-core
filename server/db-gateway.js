@@ -369,7 +369,7 @@ export function createDbGateway({
         if (value) headers.set(key, value);
       }
       headers.set("apikey", serviceKey);
-      headers.set("Authorization", `Bearer ${serviceKey}`);
+      if (/^eyJ/.test(String(serviceKey || ""))) headers.set("Authorization", `Bearer ${serviceKey}`); // 新しい鍵（sb_）は apikey だけで送る
       if (body !== undefined && !headers.has("content-type")) {
         headers.set("content-type", "application/json");
       }
