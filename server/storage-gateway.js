@@ -159,7 +159,7 @@ export function createStorageGateway({ buckets = {}, allowUids = [] } = {}) {
           method: "POST",
           headers: {
             apikey: serviceKey,
-            Authorization: `Bearer ${serviceKey}`,
+            ...(/^eyJ/.test(String(serviceKey || "")) ? { Authorization: `Bearer ${serviceKey}` } : {}),
             "Content-Type": contentType || "application/octet-stream",
             "Cache-Control": "max-age=3600",
             "x-upsert": "false",
