@@ -359,6 +359,16 @@ export function createDbGateway({
             return next;
           };
           body = JSON.stringify(Array.isArray(parsed) ? parsed.map(stamp) : stamp(parsed));
+
+          // 何行もまとめて入れるとき、supabase は「入れる列の一覧」（columns）を行の中身から作って送る。
+          // 一覧に無い列は Supabase 側で捨てられて空になるため、押印した列を一覧に足す
+          // （2026-10-23 開発部：X分析くんの取り込みで user_id が空になり止まった件）
+          if (method === "POST" && params.has("columns")) {
+            const listed = params.get("columns").split(",").map(c => c.replace(/"/g, "").trim()).filter(Boolean);
+            const stamped = [ownerColumn, ...(forceFilter ? Object.keys(forceFilter) : [])].filter(Boolean);
+            const add = stamped.filter(c => !listed.includes(c));
+            if (add.length) params.set("columns", [...listed, ...add].map(c => `"${c}"`).join(","));
+          }
         }
       }
 
