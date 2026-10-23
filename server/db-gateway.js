@@ -369,6 +369,16 @@ export function createDbGateway({
             const add = stamped.filter(c => !listed.includes(c));
             if (add.length) params.set("columns", [...listed, ...add].map(c => `"${c}"`).join(","));
           }
+
+          // 2026-10-23 開発部：upsert は、上書きされる行が本人のものかを先に確かめる（他人の行を書き換えさせないため）
+          const prefer = request.headers.get("prefer") ?? "";
+          if (method === "POST" && ownerColumn && (prefer.toLowerCase().includes("resolution=") || params.has("on_conflict"))) {
+            await assertOwnRows({
+              supabaseUrl, serviceKey, table: targetPath, ownerColumn, uid,
+              target: params.get("on_conflict") || "id",
+              rows: Array.isArray(parsed) ? parsed : [parsed],
+            });
+          }
         }
       }
 
@@ -401,6 +411,40 @@ export function createDbGateway({
       return errorResponse(err);
     }
   };
+}
+
+/**
+ * upsert の上書き先に、本人以外の行が 1 つでもあれば断る。
+ * target に持ち主の列が入っているときと、target の値が無い行（新しく作る行）は確かめない。
+ */
+async function assertOwnRows({ supabaseUrl, serviceKey, table, ownerColumn, uid, target, rows }) {
+  const cols = String(target).split(",").map(c => c.replace(/"/g, "").trim()).filter(Boolean);
+  if (!cols.length || cols.includes(ownerColumn)) return;
+  const q = v => JSON.stringify(String(v));
+  const keys = [];
+  const seen = new Set();
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    if (cols.some(c => row[c] === undefined || row[c] === null)) continue;
+    const k = JSON.stringify(cols.map(c => String(row[c])));
+    if (seen.has(k)) continue;
+    seen.add(k);
+    keys.push(cols.length === 1 ? `${cols[0]}.eq.${q(row[cols[0]])}` : `and(${cols.map(c => `${c}.eq.${q(row[c])}`).join(",")})`);
+  }
+  const headers = { apikey: serviceKey };
+  if (/^eyJ/.test(String(serviceKey || ""))) headers.Authorization = `Bearer ${serviceKey}`;
+  for (let i = 0; i < keys.length; i += 50) {
+    const params = new URLSearchParams();
+    params.set("select", ownerColumn);
+    params.set("or", `(${keys.slice(i, i + 50).join(",")})`);
+    params.set(ownerColumn, `neq.${uid}`);
+    params.set("limit", "1");
+    const res = await fetch(`${supabaseUrl}/rest/v1/${table}?${params.toString()}`, { headers });
+    if (!res.ok) throw new GatewayError(502, "上書きする前に、行の持ち主を確かめられませんでした。");
+    const found = await res.json().catch(() => null);
+    if (!Array.isArray(found)) throw new GatewayError(502, "上書きする前に、行の持ち主を確かめられませんでした。");
+    if (found.length) throw new GatewayError(403, "ほかの人の行は上書きできません。");
+  }
 }
 
 /**
