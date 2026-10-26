@@ -277,7 +277,7 @@ const out = await res.json();   // { ok: true, bucket: "contentos", path: "image
 |---|---|---|
 | いま何を開いているか | `setTabTitle(名前)` | タブの名前は開いているものの名前だけ。アプリはファビコンで示す（アプリ名を文字で出さない） |
 | 誰で入っているか | 右上の丸 | 名前・メール・設定（見た目：自動／明るい／暗い ＋ アプリ固有）・ログアウト |
-| 他のアプリへの移り方 | 右上の「アプリ一覧」 | その人が開けるアプリだけ。ポータルの切り替え（apps の isActive・isPublic・allowedStatuses と users の allowedApps）を読む。新しい権利は作らない |
+| 他のアプリへの移り方 | 右上の「アプリ一覧」 | その人が開けるアプリだけ。ポータルの切り替え（apps の isActive・isPublic・allowedStatuses と users の allowedApps）と、共通の門番（AuthGuard）の決まりの両方が通すものを出す。新しい権利は作らない。一覧は表示だけで鍵ではない（入れるかは行き先の門番） |
 | 何ができてどう操作するか | 右上の「？」 | A できることの一覧（アプリが文を渡す）・B 画面の上で押す場所を順に示す案内 |
 
 管理者には、アカウントのメニューに「会員の目で見る」が出る（アプリ一覧とマニュアルが、しあらぼ生・個別許可なしの見え方になる）。
@@ -319,7 +319,7 @@ setTabTitle("11月セミナー設計");
 | Tokens | `T`, `fmt`, `fmtK`, `currentMonth`, `today`, `p2`, `clamp` |
 | Styles | `card`, `lb10`, `mc`, `inp`, `solidBtn`, `ghostBtn`, `mono` |
 | Components | `Delta` |
-| 共通の外枠 | `mountAppShell`, `setTabTitle`, `canOpenApp`, `MEMBER_PREVIEW`, `PORTAL_URL`, `APP_ICONS`, `iconSvg`, `hostOf` |
+| 共通の外枠 | `mountAppShell`, `setTabTitle`, `appListedFor`, `MEMBER_PREVIEW`, `PORTAL_URL`, `APP_ICONS`, `iconSvg`, `hostOf` |
 
 ---
 
