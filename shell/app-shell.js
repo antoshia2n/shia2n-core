@@ -4,18 +4,16 @@
  * 目的の状態：会員がアプリを開いたとき、次の 4 つに迷わず届く。
  *   ① いま何を開いているか   → タブの名前は「開いているものの名前」だけ。アプリはファビコン（アイコン）で示す（setTabTitle）
  *   ② 誰で入っているか       → 右上の丸（アカウント）。名前・メール・ログアウト・設定
- *   ③ 他のアプリへの移り方   → 右上の「アプリ一覧」。その人が開けるアプリだけを出す（canOpenApp）
+ *   ③ 他のアプリへの移り方   → 右上の「アプリ一覧」。その人が開けるアプリだけを出す（appListedFor）
  *   ④ 何ができてどう操作するか → 右上の「？」。マニュアル 2 軸（A できることの一覧・B 画面の上の操作の案内）
  *
- * 開ける・開けないは新しく作らない。ポータル（portal.shia2n.jp）の管理の画面にある切り替えをそのまま読む：
- *   ・アプリ管理：apps/{id} の isActive（有効）・isPublic（会員ランチャーに公開）・allowedStatuses（使える会員ランク）
- *   ・ユーザー管理：users/{uid} の allowedApps（アプリごとの個別許可のチェック）
- *   判定はポータルの「開発者向け連携ガイド」に書かれた流れのまま（canOpenApp の注を見る）。
+ * 開ける・開けないは新しく作らない。ポータル（portal.shia2n.jp）の管理の画面にある切り替えと、共通の門番（AuthGuard）の決まりをそのまま読む
+ *   （appListedFor の注を見る）。アプリ一覧は「出すかどうか」だけで、入れるかを決めるのは行き先のアプリの門番。
  *
  * React を使わない（思考整理くんの画面は素の JS のため）。見た目は Shadow DOM の中に閉じ、色はアプリの CSS 変数を読む。
  * 開く窓（メニュー・マニュアル・案内）は、外を押す・Esc・別の物を開く、のどれでも閉じ、閉じたら押したボタンへ戻る。
  */
-import { signOut } from "firebase/auth";
+import { signOut, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { auth, db } from "../lib/firebase.js";
 import { APP_ICONS, hostOf, iconSvg } from "./icons.js";
@@ -26,25 +24,32 @@ export const MEMBER_PREVIEW = Object.freeze({ role: "user", paymentStatus: "basi
 
 const T = (s) => String(s ?? "").trim();
 
+/** 共通の門番（auth/AuthGuard.jsx の checkAccess）が通すランク。門番を変えたらここも変える */
+const GUARD_PASS_STATUSES = ["premium", "monitor"];
+
 /**
- * その人がそのアプリを開けるか。ポータルの「アクセス権限の判定フロー」と公開の切り替えのまま：
+ * アプリ一覧にそのアプリを出すか（表示だけ。入れるかを決めるのは行き先のアプリの門番で、ここは鍵ではない）。
+ * 「出したのに押すと入れない」を無くすため、ポータルの切り替えと門番の決まりの両方が通すものだけを出す：
  *   有効でない・住所が無い → 出さない
- *   管理者 → 有効なものは全部
+ *   管理者 → 有効なものは全部（門番も管理者は全部通す）
  *   会員ランチャーに公開していない（isPublic が false）→ 出さない
- *   個別許可（allowedApps）にそのアプリがある → 出す
- *   アプリの使える会員ランク（allowedStatuses）にその人のランク（paymentStatus）がある → 出す
- *   どちらも無い → 出さない
+ *   ポータルが許す：個別許可（allowedApps）にポータルのアプリの番号がある、または使える会員ランク（allowedStatuses）にその人のランクがある
+ *   門番が許す：ランクが premium か monitor、または個別許可に門番のアプリの名前（住所のいちばん左。x-koryaku.shia2n.jp なら x-koryaku）がある
+ *   両方が許す → 出す
  */
-export function canOpenApp(profile, app) {
+export function appListedFor(profile, app) {
   if (!app || app.isActive === false || !T(app.url)) return false;
   if (profile && profile.role === "admin") return true;
   if (app.isPublic === false) return false;
-  const id = T(app.id);
   const allowed = Array.isArray(profile?.allowedApps) ? profile.allowedApps.map(T) : [];
-  if (id && allowed.includes(id)) return true;
-  const st = Array.isArray(app.allowedStatuses) ? app.allowedStatuses.map(T) : [];
   const mine = T(profile?.paymentStatus);
-  return !!mine && st.includes(mine);
+  const id = T(app.id);
+  const st = Array.isArray(app.allowedStatuses) ? app.allowedStatuses.map(T) : [];
+  const portalOk = (!!id && allowed.includes(id)) || (!!mine && st.includes(mine));
+  const guardKey = hostOf(app.url).split(".")[0];
+  /* 門番が見るのは門番のアプリの名前だけ（ポータルの番号は見ない）。番号と名前が同じアプリ（content-os など）はどちらでも通る */
+  const guardOk = GUARD_PASS_STATUSES.includes(mine) || (!!guardKey && allowed.includes(guardKey));
+  return portalOk && guardOk;
 }
 
 /** タブの名前。アプリ名は入れない（アプリはファビコンで示す・2026-10-26 Naoki OK） */
@@ -66,11 +71,13 @@ const firebaseSource = {
     return r.docs.map((d) => ({ id: d.id, ...d.data() }));
   },
   async signOut() { await signOut(auth); },
+  watch(cb) { return onAuthStateChanged(auth, cb); },
 };
 
+/* 置き場の取り出しも try の中で行う（サイトのデータを止めたブラウザでは、localStorage に触るだけで止まるため） */
 const store = {
-  get(k, area = localStorage) { try { return area.getItem(k); } catch { return null; } },
-  set(k, v, area = localStorage) { try { if (v == null) area.removeItem(k); else area.setItem(k, v); } catch { /* 保存できない環境でも画面は動かす */ } },
+  get(k, session) { try { return (session ? sessionStorage : localStorage).getItem(k); } catch { return null; } },
+  set(k, v, session) { try { const a = session ? sessionStorage : localStorage; if (v == null) a.removeItem(k); else a.setItem(k, v); } catch { /* 保存できない環境でも画面は動かす */ } },
 };
 
 const SVG = {
@@ -102,6 +109,7 @@ a{color:inherit}
 .pill{font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:999px;background:var(--accent-bg,#fef3c7);color:var(--accent-ink,#b45309);margin-right:6px;white-space:nowrap}
 @media (max-width:640px){.wide{display:none}}
 
+.pop:focus,.drawer:focus,.bub:focus{outline:none}
 .pop{position:fixed;z-index:2147483000;min-width:280px;max-width:min(340px,calc(100vw - 16px));max-height:calc(100vh - 80px);overflow:auto;background:var(--panel,#fff);border:1px solid var(--line,#e6dfd6);border-radius:14px;box-shadow:var(--shadow,0 1px 2px rgba(60,40,20,.05),0 8px 24px rgba(60,40,20,.09));padding:6px}
 .ph{font-size:11px;font-weight:700;color:var(--faint,#a8a09a);padding:8px 10px 4px;letter-spacing:.02em}
 .pn{font-size:12px;color:var(--muted,#6b6259);padding:4px 10px 8px}
@@ -207,7 +215,8 @@ function h(tag, attrs, ...kids) {
  *   tours:  [{id, title, desc, steps:[{el, title, body, before?}] , before?}],      // B 操作の案内
  *   settings: [{label, note, run(anchor)}],  // アプリ固有の設定（見た目は外枠が持つ）
  *   onViewChange(isMember),                 // 「会員の目で見る」を切り替えたとき
- *   source,                                 // 試験用の差し替え（user・profile・apps・signOut）
+ *   beforeSignOut(),                         // ログアウトの前に待つ（保存を出し切る）。false を返すとログアウトを止める
+ *   source,                                 // 試験用の差し替え（user・profile・apps・signOut・watch）
  * }
  */
 export function mountAppShell(cfg = {}) {
@@ -219,9 +228,9 @@ export function mountAppShell(cfg = {}) {
   const HINTKEY = "s2shell:hint:" + appId;
   const THEMEKEY = "s2shell:theme";
 
-  /* 見た目（自動・明るい・暗い）はどのアプリでも同じ置き場。アプリの CSS は data-theme を読む（作り方の 1 枚 §5） */
+  /* 見た目（自動・明るい・暗い）。アプリの CSS は data-theme を読む（作り方の 1 枚 §5）。覚えるのはアプリの住所ごと */
   const applyTheme = (v) => { if (v === "light" || v === "dark") document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme; };
-  applyTheme(store.get(THEMEKEY));
+  { const t = store.get(THEMEKEY); if (t === "light" || t === "dark") applyTheme(t); }
 
   /* ---- 右上のボタン（置き場所に入る側） ---- */
   const slotHost = h("div", { class: "s2-shell", style: "display:contents" });
@@ -240,7 +249,7 @@ export function mountAppShell(cfg = {}) {
   document.body.appendChild(layerHost);
 
   let user = null, profile = null, apps = null, appsErr = null, loading = null;
-  let memberView = store.get(VIEWKEY, sessionStorage) === "1";
+  let memberView = store.get(VIEWKEY, true) === "1";
   const isAdmin = () => !!profile && profile.role === "admin";
   const viewing = () => (isAdmin() && memberView ? MEMBER_PREVIEW : profile);
   const asMember = () => !isAdmin() || memberView;
@@ -309,6 +318,8 @@ export function mountAppShell(cfg = {}) {
       return;
     }
     if (open.keys) open.keys(e);
+    /* 外枠の中から来たキーは各ホストで止める。それ以外（窓の中の字を押してフォーカスが外れたときなど）はここで止める */
+    if (open && !e.composedPath().some((n) => n === layerHost || n === slotHost)) e.stopPropagation();
   }
   function onResize() { if (open && open.place) open.place(); }
   function show(els, trigger, opts = {}) {
@@ -323,6 +334,14 @@ export function mountAppShell(cfg = {}) {
       window.addEventListener("resize", onResize);
     }, 0);
     if (open.place) open.place();
+    /* 窓の中の字を押してもフォーカスを窓に残す（外へ落ちると Tab やキーが後ろの画面に効くため） */
+    els.forEach((el) => {
+      if (!el.hasAttribute("tabindex") && !el.classList.contains("scrim")) el.setAttribute("tabindex", "-1");
+      el.addEventListener("pointerdown", (e) => {
+        const t = e.composedPath()[0];
+        if (t && t.closest && !t.closest("button,a,input,textarea,select,summary,[tabindex]:not([tabindex='-1'])")) setTimeout(() => { const box = t.closest("[tabindex='-1']"); if (box && !box.contains(lr.activeElement)) box.focus({ preventScroll: true }); }, 0);
+      });
+    });
   }
   const isOpenFrom = (t) => open && open.trigger === t;
 
@@ -368,14 +387,15 @@ export function mountAppShell(cfg = {}) {
     const curHost = here;
     const cur = h("div", { class: "it cur", "aria-current": "page" }, h("span", { class: "ai", html: iconSvg(curHost, 22) }), h("span", { class: "l" }, appName), h("span", { class: "r" }, "いま開いています"));
     p.append(cur);
+    if (appsErr && !p._retried) { p._retried = true; appsErr = null; apps = null; load(true).then(() => { if (open && open.trigger === bApps) { p.innerHTML = ""; appsBuild(p); if (open.place) open.place(); } }); }
     if (!apps && !appsErr) {
       p.append(h("div", { class: "pn" }, "読み込み中…"));
-      load().then(() => { if (open && open.trigger === bApps) { p.innerHTML = ""; appsBuild(p); if (open.place) open.place(); } });
+      if (!p._retried) load().then(() => { if (open && open.trigger === bApps) { p.innerHTML = ""; appsBuild(p); if (open.place) open.place(); } });
     } else if (appsErr) {
       p.append(h("div", { class: "pn" }, "ポータルのアプリの設定を読めませんでした。少し待ってから開き直すか、下のポータルから選んでください。"));
     } else {
       const v = viewing();
-      const list = apps.filter((a) => canOpenApp(v, a) && hostOf(a.url) !== curHost)
+      const list = apps.filter((a) => appListedFor(v, a) && hostOf(a.url) !== curHost)
         .map((a) => ({ a, host: hostOf(a.url), name: (APP_ICONS[hostOf(a.url)] || {}).name || T(a.name) || "アプリ" }))
         .sort((x, y) => x.name.localeCompare(y.name, "ja"));
       if (!list.length) p.append(h("div", { class: "pn" }, "ほかに開けるアプリはありません。"));
@@ -423,15 +443,27 @@ export function mountAppShell(cfg = {}) {
     p.append(item(SVG.apps, "アプリ一覧", SVG.chev, () => drill((q) => { q.append(back(q)); appsBuild(q); })));
     p.append(item(SVG.gear, "設定", SVG.chev, () => drill(settingsBuild)));
     p.append(h("div", { class: "sep" }));
-    p.append(item(SVG.logout, "ログアウト", "", async () => {
+    const lo = item(SVG.logout, "ログアウト", "このアプリだけ", async () => {
+      if (lo.disabled) return;
+      lo.disabled = true;
+      /* アプリに保存待ちの変更があれば、出し切ってからログアウトする（書いた分を落とさないため） */
+      let ok = true;
+      try { if (cfg.beforeSignOut) ok = (await cfg.beforeSignOut()) !== false; } catch { ok = false; }
+      if (!ok) {
+        lo.disabled = false;
+        if (!p.querySelector(".lo-note")) lo.after(h("div", { class: "pn lo-note" }, "保存が終わっていない変更があるので、ログアウトを止めました。通信が戻ってから、もう一度押してください。"));
+        return;
+      }
       close();
       try { await src.signOut(); } finally { location.reload(); }
-    }, "danger"));
+    }, "danger");
+    lo.title = "このアプリからログアウトします。ほかのアプリは、それぞれで押してください";
+    p.append(lo);
   }
 
   function setMemberView(on) {
     memberView = !!on;
-    store.set(VIEWKEY, memberView ? "1" : null, sessionStorage);
+    store.set(VIEWKEY, memberView ? "1" : null, true);
     paintMe();
     if (open && open.trigger === bMe) { close(); popover(bMe, meBuild); setTimeout(() => { const sw = open && open.els[0].querySelector(".sw"); if (sw) sw.focus(); }, 10); }
     if (cfg.onViewChange) try { cfg.onViewChange(memberView); } catch { /* アプリ側の失敗で外枠を止めない */ }
@@ -576,10 +608,10 @@ export function mountAppShell(cfg = {}) {
   }
 
   /* ---- はじめて開いた人へ：「？」の下に 1 回だけ出す ---- */
-  let hintEl = null;
+  let hintEl = null, hintT = null;
   function dismissHint() { if (hintEl) { hintEl.remove(); hintEl = null; } store.set(HINTKEY, "1"); }
   function maybeHint() {
-    if (store.get(HINTKEY) || open || !bHelp.isConnected) return;
+    if (hintEl || store.get(HINTKEY) || open || !bHelp.isConnected) return;
     const target = bHelp.offsetParent ? bHelp : bMe;
     if (!target.isConnected || !target.getClientRects().length) return;
     const r = target.getBoundingClientRect();
@@ -607,20 +639,27 @@ export function mountAppShell(cfg = {}) {
   pill.addEventListener("click", () => setMemberView(false));
 
   load();
+  let lastUid = null, unwatch = null;
+  if (src.watch) { try { unwatch = src.watch((u) => { const id = u ? u.uid : null; if (id !== lastUid) { lastUid = id; load(true); } }); } catch { /* 見張れなくても最初の読みで動く */ } }
 
   return {
     /** 右上のボタンを el の中へ置く（画面を切り替えたら呼び直してよい） */
     attach(el) {
       if (!el) return;
       if (slotHost.parentNode !== el) { close(); el.appendChild(slotHost); }
-      if (!store.get(HINTKEY)) setTimeout(maybeHint, 600);
+      if (hintEl) { hintEl.remove(); hintEl = null; } // 置き場所が変わったら、前の場所を指したままにしない
+      clearTimeout(hintT);
+      if (!store.get(HINTKEY)) hintT = setTimeout(maybeHint, 600);
     },
     setTitle: setTabTitle,
     openManual: (tab) => openManual(tab, bHelp),
     startTour,
     close: () => close(),
     isMemberView: () => isAdmin() && memberView,
+    /** 外枠の窓（メニュー・マニュアル・案内）が開いているか。アプリのキーの処理で、開いている間は動かないために使う */
+    isOpen: () => !!open,
     reload: () => load(true),
-    destroy() { close(); dismissHint(); slotHost.remove(); layerHost.remove(); },
+    /** React などで作り直すときは、前の外枠を必ず destroy する（2 つ並ばないため） */
+    destroy() { close(); if (hintEl) { hintEl.remove(); hintEl = null; } clearTimeout(hintT); if (unwatch) unwatch(); slotHost.remove(); layerHost.remove(); },
   };
 }
