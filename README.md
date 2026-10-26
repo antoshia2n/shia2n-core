@@ -269,6 +269,44 @@ const out = await res.json();   // { ok: true, bucket: "contentos", path: "image
 
 ---
 
+## 共通の外枠（2026-10-26 追加・1 本目は思考整理くん）
+
+どのアプリでも、開いた人が次の 4 つに迷わず届くようにする部品。React を使わないので、素の JS の画面でも React の画面でも同じに使える。
+
+| 目的 | 部品 | 中身 |
+|---|---|---|
+| いま何を開いているか | `setTabTitle(名前)` | タブの名前は開いているものの名前だけ。アプリはファビコンで示す（アプリ名を文字で出さない） |
+| 誰で入っているか | 右上の丸 | 名前・メール・設定（見た目：自動／明るい／暗い ＋ アプリ固有）・ログアウト |
+| 他のアプリへの移り方 | 右上の「アプリ一覧」 | その人が開けるアプリだけ。ポータルの切り替え（apps の isActive・isPublic・allowedStatuses と users の allowedApps）を読む。新しい権利は作らない |
+| 何ができてどう操作するか | 右上の「？」 | A できることの一覧（アプリが文を渡す）・B 画面の上で押す場所を順に示す案内 |
+
+管理者には、アカウントのメニューに「会員の目で見る」が出る（アプリ一覧とマニュアルが、しあらぼ生・個別許可なしの見え方になる）。
+
+### アプリ側の入れ方（3 手順）
+
+```js
+import { mountAppShell, setTabTitle } from "shia2n-core";
+
+// 1. ログインの内側で 1 回作る
+const shell = mountAppShell({
+  appId: "mindmap", appName: "思考整理くん",
+  manual: { intro: "…", sections: [{ title: "書く", items: [{ t: "枝を足す", d: "Tab で子、Enter で兄弟", keys: ["Tab"] }] }] },
+  keys: [["マップ", "Tab", "子を足す"]],                 // アプリのキーの一覧をそのまま
+  tours: [{ id: "first", title: "はじめの 1 枚", desc: "…", steps: [{ el: "#newBtn", title: "＋ 新規", body: "…" }] }],
+  settings: [{ label: "段ごとの文字", note: "…", run: (anchor) => openMySettings(anchor) }],
+});
+// 2. 右上に置く場所を渡す（画面ごとに置き場所が違えば、切り替えるたびに呼ぶ）
+shell.attach(document.querySelector("#header-right"));
+// 3. 開いているものが変わったらタブの名前を変える
+setTabTitle("11月セミナー設計");
+```
+
+- 開く窓は、外を押す・Esc・別の物を開く、のどれでも閉じ、閉じたら押したボタンへ戻る
+- 見た目は Shadow DOM の中に閉じ、色はアプリの CSS 変数（--bg・--panel・--fg・--accent など。作り方の 1 枚 §5）を読む
+- ファビコンを置いていないアプリは、タブにアプリの印が出ない。先に icon-rules.md の形でファビコンを置く
+
+---
+
 ## エクスポート一覧
 
 | カテゴリ | エクスポート |
@@ -281,6 +319,7 @@ const out = await res.json();   // { ok: true, bucket: "contentos", path: "image
 | Tokens | `T`, `fmt`, `fmtK`, `currentMonth`, `today`, `p2`, `clamp` |
 | Styles | `card`, `lb10`, `mc`, `inp`, `solidBtn`, `ghostBtn`, `mono` |
 | Components | `Delta` |
+| 共通の外枠 | `mountAppShell`, `setTabTitle`, `canOpenApp`, `MEMBER_PREVIEW`, `PORTAL_URL`, `APP_ICONS`, `iconSvg`, `hostOf` |
 
 ---
 
