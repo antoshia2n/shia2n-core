@@ -299,6 +299,15 @@ export function mountAppShell(cfg = {}) {
   function onKey(e) {
     if (!open) return;
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (open.esc) open.esc(); else close("esc"); return; }
+    /* 案内とマニュアルの中では Tab が外へ出ないようにする（外に出ると、押したキーが後ろの画面に効くため） */
+    if (e.key === "Tab" && open.trap) {
+      const f = [...open.trap().querySelectorAll("button:not([disabled]),a[href],input,textarea,select,summary")].filter((x) => x.offsetParent !== null || x.getClientRects().length);
+      if (!f.length) { e.preventDefault(); return; }
+      const i = f.indexOf(lr.activeElement);
+      e.preventDefault(); e.stopPropagation();
+      f[(i < 0 ? 0 : i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+      return;
+    }
     if (open.keys) open.keys(e);
   }
   function onResize() { if (open && open.place) open.place(); }
@@ -451,7 +460,7 @@ export function mountAppShell(cfg = {}) {
     tA.onclick = () => { lastTab = "a"; paint(); };
     tB.onclick = () => { lastTab = "b"; paint(); };
     paint();
-    show([scrim, dr], trigger, { kind: "manual" });
+    show([scrim, dr], trigger, { kind: "manual", trap: () => dr });
     setTimeout(() => (lastTab === "a" ? tA : tB).focus(), 0);
   }
   function paintA(body) {
@@ -544,7 +553,7 @@ export function mountAppShell(cfg = {}) {
     };
     wrap.addEventListener("pointerdown", (e) => { if (!e.composedPath().includes(bub)) { e.preventDefault(); close("outside"); } });
     show([wrap], bHelp, {
-      kind: "tour", place,
+      kind: "tour", place, trap: () => bub,
       keys: (e) => {
         if (e.key === "ArrowRight") { e.preventDefault(); e.stopPropagation(); if (i < t.steps.length - 1) { i++; paint(); } }
         else if (e.key === "ArrowLeft") { e.preventDefault(); e.stopPropagation(); if (i > 0) { i--; paint(); } }
@@ -558,7 +567,7 @@ export function mountAppShell(cfg = {}) {
     const bub = h("div", { class: "bub" }, h("div", { class: "k" }, t.title), h("div", { class: "d" }, msg),
       h("div", { class: "row" }, h("span", { class: "grow" }), h("button", { class: "go", type: "button", onclick: () => close("done") }, "閉じる")));
     wrap.append(h("div", { class: "spot none" }), bub);
-    show([wrap], bHelp, { kind: "tour" });
+    show([wrap], bHelp, { kind: "tour", trap: () => bub });
     requestAnimationFrame(() => {
       bub.style.left = Math.max(12, innerWidth / 2 - bub.offsetWidth / 2) + "px";
       bub.style.top = Math.max(12, innerHeight * 0.35 - bub.offsetHeight / 2) + "px";
@@ -583,6 +592,14 @@ export function mountAppShell(cfg = {}) {
     hintEl.style.left = x + "px"; hintEl.style.top = r.bottom + 10 + "px";
     hintEl.style.setProperty("--ax", Math.max(10, r.right - x - r.width / 2 - 6) + "px");
   }
+
+  /* 外枠の中で押したキーは、アプリの画面へ流さない（Enter や Delete がマップの枝に効いてしまうため）。
+     ボタンを押す・字を打つなど、外枠の中での働きはそのまま残る */
+  const keep = (e) => e.stopPropagation();
+  slotHost.addEventListener("keydown", keep);
+  layerHost.addEventListener("keydown", keep);
+  slotHost.addEventListener("keyup", keep);
+  layerHost.addEventListener("keyup", keep);
 
   bHelp.addEventListener("click", () => openManual(lastTab, bHelp));
   bApps.addEventListener("click", () => popover(bApps, appsBuild));
