@@ -15,6 +15,7 @@ export const APP_ICONS = {
   "haaku.shia2n.jp":         { name: "haAku",          color: "#0284c7", g: '<path d="M3.8 16.5a8.2 8.2 0 0 1 16.4 0"/><path d="M12 16.5l4-5"/><circle cx="12" cy="16.5" r="1.4"/><path d="M3.5 20h17"/>' },
   "kiroku.shia2n.jp":        { name: "記録くん",       color: "#4338ca", g: '<rect x="5" y="4" width="14" height="16.5" rx="2"/><path d="M8.5 2.8v3M15.5 2.8v3M8.5 10.5h7M8.5 14h7M8.5 17.5h4"/>' },
   "sales-manager.shia2n.jp": { name: "売上管理",       color: "#ca8a04", g: '<circle cx="12" cy="12" r="8.5"/><path d="M8.8 7.2 12 11.5l3.2-4.3M12 11.5v6M9.2 12.8h5.6M9.2 15.5h5.6"/>' },
+  "note-koryaku.shia2n.jp":  { name: "note攻略くん",   color: "#9f1239", g: '<path d="M6 3.5h8.5L18 7v13.5H6z"/><path d="M14.5 3.5V7H18"/><path d="M12 18c-2.6-1.7-4.2-3.2-4.2-4.9a2.1 2.1 0 0 1 4.2-.5 2.1 2.1 0 0 1 4.2.5c0 1.7-1.6 3.2-4.2 4.9z"/>' },
 };
 
 const LEAF = "M44 0H114A14 14 0 0 1 128 14V84A44 44 0 0 1 84 128H14A14 14 0 0 1 0 114V44A44 44 0 0 1 44 0Z";
