@@ -22,3 +22,7 @@ export { card, lb10, mc, inp, solidBtn, ghostBtn, mono } from "./styles.js";
 
 // Shared components
 export { Delta } from "./components/Delta.jsx";
+
+// 各アプリ共通の外枠（タブの名前・右上のメニュー・アプリ一覧・マニュアル 2 軸・2026-10-26）
+export { mountAppShell, setTabTitle, canOpenApp, MEMBER_PREVIEW, PORTAL_URL } from "./shell/app-shell.js";
+export { APP_ICONS, iconSvg, hostOf } from "./shell/icons.js";
