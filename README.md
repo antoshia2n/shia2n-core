@@ -320,6 +320,7 @@ setTabTitle("11月セミナー設計");
 | Styles | `card`, `lb10`, `mc`, `inp`, `solidBtn`, `ghostBtn`, `mono` |
 | Components | `Delta` |
 | 共通の外枠 | `mountAppShell`, `setTabTitle`, `appListedFor`, `MEMBER_PREVIEW`, `PORTAL_URL`, `APP_ICONS`, `iconSvg`, `hostOf` |
+| 開けるアプリの判定（Firebase を読まない） | `shia2n-core/shell/app-access.js` の `appListedFor`, `GUARD_PASS_STATUSES`。外枠のアプリ一覧とポータルの会員の札が同じこの 1 本を読む |
 
 ---
 

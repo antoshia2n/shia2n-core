@@ -7,6 +7,7 @@ import { solidBtn } from "../styles.js";
 
 const PORTAL_URL = "https://portal.shia2n.jp";
 
+/* 通すランクを変えたら shell/app-access.js の GUARD_PASS_STATUSES も変える（アプリ一覧とポータルの札がそれを読む） */
 async function checkAccess(uid, appId) {
   const snap = await getDoc(doc(db, "users", uid));
   if (!snap.exists()) return false;

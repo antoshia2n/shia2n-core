@@ -17,6 +17,7 @@ import { signOut, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { auth, db } from "../lib/firebase.js";
 import { APP_ICONS, hostOf, iconSvg } from "./icons.js";
+import { appListedFor } from "./app-access.js";
 
 export const PORTAL_URL = "https://portal.shia2n.jp";
 /** 「会員の目で見る」で使う見え方：しあらぼ生（basic）・個別許可なし。生徒の大半がこの形（2026-10-26 実測） */
@@ -24,33 +25,8 @@ export const MEMBER_PREVIEW = Object.freeze({ role: "user", paymentStatus: "basi
 
 const T = (s) => String(s ?? "").trim();
 
-/** 共通の門番（auth/AuthGuard.jsx の checkAccess）が通すランク。門番を変えたらここも変える */
-const GUARD_PASS_STATUSES = ["premium", "monitor"];
-
-/**
- * アプリ一覧にそのアプリを出すか（表示だけ。入れるかを決めるのは行き先のアプリの門番で、ここは鍵ではない）。
- * 「出したのに押すと入れない」を無くすため、ポータルの切り替えと門番の決まりの両方が通すものだけを出す：
- *   有効でない・住所が無い → 出さない
- *   管理者 → 有効なものは全部（門番も管理者は全部通す）
- *   会員ランチャーに公開していない（isPublic が false）→ 出さない
- *   ポータルが許す：個別許可（allowedApps）にポータルのアプリの番号がある、または使える会員ランク（allowedStatuses）にその人のランクがある
- *   門番が許す：ランクが premium か monitor、または個別許可に門番のアプリの名前（住所のいちばん左。x-koryaku.shia2n.jp なら x-koryaku）がある
- *   両方が許す → 出す
- */
-export function appListedFor(profile, app) {
-  if (!app || app.isActive === false || !T(app.url)) return false;
-  if (profile && profile.role === "admin") return true;
-  if (app.isPublic === false) return false;
-  const allowed = Array.isArray(profile?.allowedApps) ? profile.allowedApps.map(T) : [];
-  const mine = T(profile?.paymentStatus);
-  const id = T(app.id);
-  const st = Array.isArray(app.allowedStatuses) ? app.allowedStatuses.map(T) : [];
-  const portalOk = (!!id && allowed.includes(id)) || (!!mine && st.includes(mine));
-  const guardKey = hostOf(app.url).split(".")[0];
-  /* 門番が見るのは門番のアプリの名前だけ（ポータルの番号は見ない）。番号と名前が同じアプリ（content-os など）はどちらでも通る */
-  const guardOk = GUARD_PASS_STATUSES.includes(mine) || (!!guardKey && allowed.includes(guardKey));
-  return portalOk && guardOk;
-}
+/* 「開けるアプリ」の判定は shell/app-access.js の 1 本（ポータルの会員の画面も同じものを読む） */
+export { appListedFor };
 
 /** タブの名前。アプリ名は入れない（アプリはファビコンで示す・2026-10-26 Naoki OK） */
 export function setTabTitle(name, fallback) {
