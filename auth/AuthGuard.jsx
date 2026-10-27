@@ -4,20 +4,26 @@ import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase.js";
 import { T } from "../tokens.js";
 import { solidBtn } from "../styles.js";
+import { passesGate } from "./access-rule.js";
 
 const PORTAL_URL = "https://portal.shia2n.jp";
 
-/* 通すランクを変えたら shell/app-access.js の GUARD_PASS_STATUSES も変える（アプリ一覧とポータルの札がそれを読む） */
-async function checkAccess(uid, appId) {
-  const snap = await getDoc(doc(db, "users", uid));
-  if (!snap.exists()) return false;
-  const { role, allowedApps, paymentStatus } = snap.data();
-  return (
-    role === "admin" ||
-    paymentStatus === "premium" ||
-    paymentStatus === "monitor" ||
-    (Array.isArray(allowedApps) && allowedApps.includes(appId))
-  );
+/* 2026-10-27 から入場は権利の表（門番の apps）で決める。ポータルの札（shell/app-access.js）はまだ Firestore の値で、別の便で直す */
+async function checkAccess(user, appId) {
+  const snap = await getDoc(doc(db, "users", user.uid));
+  const role = snap.exists() ? snap.data().role : undefined;
+  if (role === "admin") return true;
+  try {
+    const idToken = await user.getIdToken();
+    const res = await fetch("https://shia2n-mcp.gameister1.workers.dev/gate/resolve", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+    const body = await res.json().catch(() => ({}));
+    return passesGate(role, body, appId);
+  } catch {
+    return false;
+  }
 }
 
 export function AuthGuard({ appId, appName, children }) {
@@ -32,7 +38,7 @@ export function AuthGuard({ appId, appName, children }) {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) { setState("login"); return; }
       try {
-        const ok = await checkAccess(user.uid, appId);
+        const ok = await checkAccess(user, appId);
         if (ok) {
           setState("ok");
         } else {
