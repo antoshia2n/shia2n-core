@@ -33,3 +33,21 @@ test("touchRecent は shia2n.jp では共通の置き場に書き、読み直す
   touchRecent("a.b", { doc: jar, now: 1, hostname: "localhost" });
   assert.doesNotMatch(jar.last, /domain=/);
 });
+
+import { hostForTarget, memberAppItems } from "../shell/all-apps.js";
+
+test("門番の名前 → 住所：左端が同じもの・スワイプくんだけ別名・名簿に無いものは null", () => {
+  assert.equal(hostForTarget("x-koryaku"), "x-koryaku.shia2n.jp");
+  assert.equal(hostForTarget("note-koryaku"), "note-koryaku.shia2n.jp");
+  assert.equal(hostForTarget("swipe-file"), "swipe.shia2n.jp");
+  assert.equal(hostForTarget("mindmap"), "mindmap.shia2n.jp");
+  assert.equal(hostForTarget("nothing"), null);
+  assert.equal(hostForTarget(""), null);
+});
+
+test("会員の一覧：いま開いているアプリ・ポータル・名簿に無いもの・重なりを外す", () => {
+  const out = memberAppItems(["portal", "x-koryaku", "note-koryaku", "swipe-file", "swipe-file", "unknown"], "x-koryaku.shia2n.jp");
+  assert.deepEqual(out.map((x) => x.host), ["note-koryaku.shia2n.jp", "swipe.shia2n.jp"]);
+  assert.deepEqual(out.map((x) => x.name), ["note攻略くん", "スワイプくん"]);
+  assert.deepEqual(memberAppItems(null, "x"), []);
+});
