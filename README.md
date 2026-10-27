@@ -323,6 +323,7 @@ setTabTitle("11月セミナー設計");
 | Components | `Delta` |
 | 共通の外枠 | `mountAppShell`, `setTabTitle`, `appListedFor`, `MEMBER_PREVIEW`, `PORTAL_URL`, `APP_ICONS`, `iconSvg`, `hostOf` |
 | 開けるアプリの判定（Firebase を読まない） | `shia2n-core/shell/app-access.js` の `appListedFor`, `GUARD_PASS_STATUSES`。外枠のアプリ一覧とポータルの会員の札が同じこの 1 本を読む |
+| 全アプリの名簿と最近開いた順（1.8.0） | `shia2n-core/shell/all-apps.js` の `ALL_APPS`・`touchRecent`・`sortByRecent`。管理者が自分の目で見るときだけ、アプリ一覧にポータルの設定に無いアプリも名簿から足す。並びは shia2n.jp 共通のクッキー s2recent（端末ごと）で最近開いた順。会員に出る範囲は変えない。アプリを足したら ALL_APPS に 1 行足す |
 
 ---
 

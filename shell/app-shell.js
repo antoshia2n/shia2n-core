@@ -18,6 +18,7 @@ import { doc, getDoc, collection, query, where, getDocs } from "firebase/firesto
 import { auth, db } from "../lib/firebase.js";
 import { APP_ICONS, hostOf, iconSvg } from "./icons.js";
 import { appListedFor } from "./app-access.js";
+import { ALL_APPS, readRecent, touchRecent, sortByRecent } from "./all-apps.js";
 
 export const PORTAL_URL = "https://portal.shia2n.jp";
 /** 「会員の目で見る」で使う見え方：しあらぼ生（basic）・個別許可なし。生徒の大半がこの形（2026-10-26 実測） */
@@ -203,6 +204,7 @@ export function mountAppShell(cfg = {}) {
   const VIEWKEY = "s2shell:viewas";
   const HINTKEY = "s2shell:hint:" + appId;
   const THEMEKEY = "s2shell:theme";
+  touchRecent(here); // アプリ一覧の「最近開いた順」に使う（shell/all-apps.js）
 
   /* 見た目（自動・明るい・暗い）。アプリの CSS は data-theme を読む（作り方の 1 枚 §5）。覚えるのはアプリの住所ごと */
   const applyTheme = (v) => { if (v === "light" || v === "dark") document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme; };
@@ -359,7 +361,7 @@ export function mountAppShell(cfg = {}) {
   const back = (p) => h("button", { class: "back", type: "button", onclick: () => p._up && p._up(), html: SVG.back + "<span>戻る</span>" });
 
   function appsBuild(p) {
-    p.append(h("div", { class: "ph" }, asMember() ? "開けるアプリ" : "アプリ（管理者なので全部）"));
+    p.append(h("div", { class: "ph" }, asMember() ? "開けるアプリ" : "全アプリ（最近開いた順）"));
     const curHost = here;
     const cur = h("div", { class: "it cur", "aria-current": "page" }, h("span", { class: "ai", html: iconSvg(curHost, 22) }), h("span", { class: "l" }, appName), h("span", { class: "r" }, "いま開いています"));
     p.append(cur);
@@ -371,13 +373,25 @@ export function mountAppShell(cfg = {}) {
       p.append(h("div", { class: "pn" }, "ポータルのアプリの設定を読めませんでした。少し待ってから開き直すか、下のポータルから選んでください。"));
     } else {
       const v = viewing();
-      const list = apps.filter((a) => appListedFor(v, a) && hostOf(a.url) !== curHost)
-        .map((a) => ({ a, host: hostOf(a.url), name: (APP_ICONS[hostOf(a.url)] || {}).name || T(a.name) || "アプリ" }))
-        .sort((x, y) => x.name.localeCompare(y.name, "ja"));
+      const seen = new Set([curHost]);
+      const items = [];
+      apps.filter((a) => appListedFor(v, a)).forEach((a) => {
+        const host = hostOf(a.url);
+        if (!host || seen.has(host)) return;
+        seen.add(host);
+        items.push({ host, url: T(a.url), desc: T(a.description), name: (APP_ICONS[host] || {}).name || T(a.name) || "アプリ" });
+      });
+      /* 管理者が自分の目で見ているときだけ、ポータルの設定に無いアプリも名簿から足す（会員の見え方は変えない） */
+      if (!asMember()) ALL_APPS.forEach((x) => {
+        if (seen.has(x.host)) return;
+        seen.add(x.host);
+        items.push({ host: x.host, url: x.host, desc: "", name: (APP_ICONS[x.host] || {}).name || x.name });
+      });
+      const list = sortByRecent(items, readRecent());
       if (!list.length) p.append(h("div", { class: "pn" }, "ほかに開けるアプリはありません。"));
-      list.forEach(({ a, host, name }) => {
-        let url = T(a.url); if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-        p.append(h("a", { class: "it", href: url, title: T(a.description) || name }, h("span", { class: "ai", html: iconSvg(host, 22) }), h("span", { class: "l" }, name)));
+      list.forEach(({ host, url: u, desc, name }) => {
+        let url = u; if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+        p.append(h("a", { class: "it", href: url, title: desc || name, onclick: () => touchRecent(host) }, h("span", { class: "ai", html: iconSvg(host, 22) }), h("span", { class: "l" }, name)));
       });
     }
     p.append(h("div", { class: "sep" }));
