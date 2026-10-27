@@ -636,7 +636,9 @@ export function mountAppShell(cfg = {}) {
     /** 右上のボタンを el の中へ置く（画面を切り替えたら呼び直してよい） */
     attach(el) {
       if (!el) return;
-      if (slotHost.parentNode !== el) { close(); el.appendChild(slotHost); }
+      /* 置き場所を移すだけで、開いている窓（メニュー・マニュアル・案内）は閉じない。
+         画面を描くたびに置き場所を作り直すアプリ（X攻略くん）では、閉じると案内の「始める」が何も起こさなくなるため（2026-10-27） */
+      if (slotHost.parentNode !== el) { el.appendChild(slotHost); if (open && open.place) requestAnimationFrame(() => { if (open && open.place) open.place(); }); }
       if (hintEl) { hintEl.remove(); hintEl = null; } // 置き場所が変わったら、前の場所を指したままにしない
       clearTimeout(hintT);
       if (!store.get(HINTKEY)) hintT = setTimeout(maybeHint, 600);
