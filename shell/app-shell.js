@@ -18,7 +18,7 @@ import { doc, getDoc, collection, query, where, getDocs } from "firebase/firesto
 import { auth, db } from "../lib/firebase.js";
 import { APP_ICONS, hostOf, iconSvg } from "./icons.js";
 import { appListedFor } from "./app-access.js";
-import { ALL_APPS, readRecent, touchRecent, sortByRecent } from "./all-apps.js";
+import { ALL_APPS, readRecent, touchRecent, sortByRecent, memberAppItems } from "./all-apps.js";
 
 export const PORTAL_URL = "https://portal.shia2n.jp";
 /** 「会員の目で見る」で使う見え方：しあらぼ生（basic）・個別許可なし。生徒の大半がこの形（2026-10-26 実測） */
@@ -47,9 +47,21 @@ const firebaseSource = {
     const r = await getDocs(q);
     return r.docs.map((d) => ({ id: d.id, ...d.data() }));
   },
+  /** 門番が答える、この人が開けるアプリの名前（権利の表 member_access）。台帳にいない人は []。引けなければ投げる（2026-10-28） */
+  async gateApps() {
+    const u = auth.currentUser;
+    if (!u) return [];
+    const token = await u.getIdToken();
+    const r = await fetch(GATE_URL, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+    const b = await r.json().catch(() => null);
+    if (b && b.ok === true) return Array.isArray(b.apps) ? b.apps : [];
+    if (r.status === 403) return []; // 台帳にいない・メールが無いなど（門番が断った）
+    throw new Error("gate " + r.status);
+  },
   async signOut() { await signOut(auth); },
   watch(cb) { return onAuthStateChanged(auth, cb); },
 };
+const GATE_URL = "https://shia2n-mcp.gameister1.workers.dev/gate/resolve";
 
 /* 置き場の取り出しも try の中で行う（サイトのデータを止めたブラウザでは、localStorage に触るだけで止まるため） */
 const store = {
@@ -227,6 +239,7 @@ export function mountAppShell(cfg = {}) {
   document.body.appendChild(layerHost);
 
   let user = null, profile = null, apps = null, appsErr = null, loading = null;
+  let gateApps = null; // 会員の一覧に使う門番の答え（2026-10-28）。管理者は読まない。引けなければ null（ポータルの設定で出す）
   let memberView = store.get(VIEWKEY, true) === "1";
   const isAdmin = () => !!profile && profile.role === "admin";
   const viewing = () => (isAdmin() && memberView ? MEMBER_PREVIEW : profile);
@@ -256,6 +269,7 @@ export function mountAppShell(cfg = {}) {
         paintMe();
       } catch { profile = profile || {}; }
       try { apps = await src.apps(); appsErr = null; } catch (e) { apps = null; appsErr = e; }
+      if (!isAdmin() && src.gateApps) { try { gateApps = await src.gateApps(); } catch { gateApps = null; } } else gateApps = null;
     })();
     return loading;
   }
@@ -365,6 +379,18 @@ export function mountAppShell(cfg = {}) {
     const curHost = here;
     const cur = h("div", { class: "it cur", "aria-current": "page" }, h("span", { class: "ai", html: iconSvg(curHost, 22) }), h("span", { class: "l" }, appName), h("span", { class: "r" }, "いま開いています"));
     p.append(cur);
+    /* 会員（管理者ではない人）は、門番の答え（権利の表）で出す（2026-10-28）。ポータルの設定は読まない。
+       管理者の「会員の目で見る」は今までどおりポータルの設定で出す（門番に「仮の会員」を聞けないため） */
+    if (!isAdmin() && Array.isArray(gateApps)) {
+      const list = sortByRecent(memberAppItems(gateApps, curHost), readRecent());
+      if (!list.length) p.append(h("div", { class: "pn" }, "ほかに開けるアプリはありません。"));
+      list.forEach(({ host, name }) => {
+        p.append(h("a", { class: "it", href: "https://" + host, title: (APP_ICONS[host] || {}).name || name, onclick: () => touchRecent(host) }, h("span", { class: "ai", html: iconSvg(host, 22) }), h("span", { class: "l" }, (APP_ICONS[host] || {}).name || name)));
+      });
+      p.append(h("div", { class: "sep" }));
+      p.append(h("a", { class: "it", href: PORTAL_URL, target: "_blank", rel: "noopener" }, h("span", { class: "i", html: SVG.out }), h("span", { class: "l" }, "ポータルを開く（教材とアプリの入口）")));
+      return;
+    }
     if (appsErr && !p._retried) { p._retried = true; appsErr = null; apps = null; load(true).then(() => { if (open && open.trigger === bApps) { p.innerHTML = ""; appsBuild(p); if (open.place) open.place(); } }); }
     if (!apps && !appsErr) {
       p.append(h("div", { class: "pn" }, "読み込み中…"));

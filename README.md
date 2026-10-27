@@ -20,6 +20,8 @@ Naoki の全アプリで共有する中核モジュール。AuthGuard、Firebase
 
 ### 認証
 
+1.9.0（2026-10-28）：右上のアプリ一覧を、会員（管理者ではない人）には門番 /gate/resolve の apps（権利の表 member_access）で出す。管理者の一覧（全アプリを使った順）と「会員の目で見る」は今までどおり
+
 1.7.0（2026-10-27）：管理者（Firestore の role が admin）以外は、門番 /gate/resolve の apps にアプリの名前があるときだけ通す。表 member_access に行が無いアプリは会員に閉じたまま
 
 ```jsx

@@ -92,3 +92,30 @@ export function touchRecent(host, { doc = globalThis.document, now = Date.now(),
     doc.cookie = RECENT_COOKIE + "=" + encodeURIComponent(formatRecent(map)) + "; path=/; max-age=31536000; SameSite=Lax; Secure" + domainFor(hostname);
   } catch { /* クッキーを止めたブラウザでも動かす */ }
 }
+
+/* ---- 会員のアプリ一覧（2026-10-28 開発部・統括の依頼 00:05・Naoki「OK」00:34） ----
+ * 会員の右上の一覧は、門番 /gate/resolve の apps（権利の表 member_access で決まる）から出す。
+ * apps に入っているのは各アプリの門番の名前（AuthGuard の appId）。住所の左端と同じでないものだけ下に書く */
+const TARGET_HOST = Object.freeze({ "swipe-file": "swipe.shia2n.jp" });
+
+/** 門番の名前 → 住所。名簿（ALL_APPS）に無いものは null */
+export function hostForTarget(target) {
+  const t = String(target ?? "").trim().toLowerCase();
+  if (!t) return null;
+  if (TARGET_HOST[t]) return TARGET_HOST[t];
+  const hit = ALL_APPS.find((a) => a.host.split(".")[0] === t);
+  return hit ? hit.host : null;
+}
+
+/** 門番の apps → 一覧に出す { host, name }。いま開いているアプリ・ポータル（一覧の下に別の行がある）・名簿に無いもの・重なりは外す */
+export function memberAppItems(targets, here) {
+  const seen = new Set([String(here || "").toLowerCase(), "portal.shia2n.jp"]);
+  const out = [];
+  for (const t of Array.isArray(targets) ? targets : []) {
+    const host = hostForTarget(t);
+    if (!host || seen.has(host)) continue;
+    seen.add(host);
+    out.push({ host, name: ALL_APPS.find((a) => a.host === host).name });
+  }
+  return out;
+}
