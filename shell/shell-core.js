@@ -485,12 +485,15 @@ export function mountAppShell(cfg = {}) {
     if (isOpenFrom(trigger) && open.kind === "manual") { close("esc"); return; }
     dismissHint();
     lastTab = tab || lastTab;
+    /* 操作の案内を渡していないアプリでは、中身の無い「操作の案内」を出さない（1.10.1） */
+    const hasTours = Array.isArray(cfg.tours) && cfg.tours.length > 0;
+    if (!hasTours) lastTab = "a";
     const scrim = h("div", { class: "scrim", onclick: () => close("outside") });
     const dr = h("aside", { class: "drawer", role: "dialog", "aria-modal": "true", "aria-label": appName + " の使い方" });
     const x = h("button", { class: "ib", type: "button", "aria-label": "閉じる", title: "閉じる（Esc）", html: SVG.close, onclick: () => close("esc") });
     dr.append(h("div", { class: "dh" }, h("span", { class: "ai", html: iconSvg(here, 26) }), h("div", { class: "t" }, "使い方", h("small", null, appName)), x));
     const tA = h("button", { class: "tab", type: "button", role: "tab" }, "できること");
-    const tB = h("button", { class: "tab", type: "button", role: "tab" }, "操作の案内");
+    const tB = h("button", { class: "tab", type: "button", role: "tab", hidden: !hasTours }, "操作の案内");
     dr.append(h("div", { class: "tabs", role: "tablist" }, tA, tB));
     const body = h("div", { class: "db" });
     dr.append(body);
@@ -629,7 +632,9 @@ export function mountAppShell(cfg = {}) {
     hintEl = h("div", { class: "hint", role: "status" }, "はじめての方へ。使い方と、画面の上の案内はここから開けます。",
       h("div", { class: "row" },
         h("button", { class: "ghost", type: "button", onclick: dismissHint }, "閉じる"),
-        h("button", { class: "go", type: "button", onclick: () => { dismissHint(); openManual("b", bHelp); } }, "案内を見る")));
+        (Array.isArray(cfg.tours) && cfg.tours.length
+          ? h("button", { class: "go", type: "button", onclick: () => { dismissHint(); openManual("b", bHelp); } }, "案内を見る")
+          : h("button", { class: "go", type: "button", onclick: () => { dismissHint(); openManual("a", bHelp); } }, "使い方を見る"))));
     lr.appendChild(hintEl);
     const w = 250; const x = Math.max(8, Math.min(r.right - w, innerWidth - w - 8));
     hintEl.style.left = x + "px"; hintEl.style.top = r.bottom + 10 + "px";
