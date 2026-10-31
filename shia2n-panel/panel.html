@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>シアニンパネル</title>
+<style>
+:root{--bg:#f5f0eb;--panel:#fff;--soft:#f7f3ee;--line:#e6dfd6;--field:#a39a90;--fg:#1a1a1a;--muted:#6b6259;--accent:#f59e0b;--accent-ink:#b45309;--accent-bg:#fef3c7;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#1b1916;--panel:#24211d;--soft:#2b2823;--line:#38332c;--field:#6f665c;--fg:#f1ece6;--muted:#b0a69b;--accent:#fbbf24;--accent-ink:#fbbf24;--accent-bg:rgba(251,191,36,.16);color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.5 "Geist","Hiragino Sans","Noto Sans JP",system-ui,sans-serif}
+body{display:flex;flex-direction:column}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px;border-radius:8px}
+.bar{display:flex;align-items:center;gap:4px;padding:6px 6px;border-bottom:1px solid var(--line);background:var(--panel);flex:none}
+.strip{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;flex:1;min-width:0;mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent)}
+.strip::-webkit-scrollbar{display:none}
+.ab{width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:10px;position:relative}
+.ab:hover{background:var(--soft)}
+.ab[aria-pressed="true"]{background:var(--accent-bg)}
+.ab[aria-pressed="true"]::after{content:"";position:absolute;left:12px;right:12px;bottom:3px;height:3px;border-radius:2px;background:var(--accent-ink)}
+.ib{height:44px;min-width:44px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center;gap:4px;border-radius:10px;color:var(--muted);font-weight:700;font-size:12px;flex:none}
+.ib:hover,.ib[aria-expanded="true"]{background:var(--soft);color:var(--fg)}
+.sep{width:1px;height:24px;background:var(--line);flex:none}
+@media (pointer:fine){.ab{width:34px;height:34px}.ib{height:34px;min-width:34px}}
+.name{font-size:12px;color:var(--muted);padding:3px 12px 4px;border-bottom:1px solid var(--line);background:var(--panel);display:flex;gap:6px;align-items:center;flex:none;white-space:nowrap;overflow:hidden}
+.name b{color:var(--fg);font-size:12.5px}
+.stage{flex:1;min-height:0;position:relative}
+.stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
+.pop{position:fixed;z-index:10;top:52px;right:6px;width:min(300px,calc(100vw - 12px));max-height:calc(100vh - 64px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 24px rgba(60,40,20,.14);padding:6px}
+.pop h2{font-size:11.5px;font-weight:700;color:var(--muted);margin:6px 10px 4px}
+.it{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:0 10px;min-height:44px;border-radius:8px;font-size:13.5px;color:var(--fg);text-decoration:none}
+@media (pointer:fine){.it{min-height:34px}}
+.it:hover,.it:focus-visible{background:var(--soft)}
+.it .l{flex:1}
+.it .r{font-size:12px;color:var(--muted)}
+.empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:13px;padding:24px;text-align:center}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<!-- 上の帯：細い画面のあるアプリ（押すとこのパネルの中で切り替わる）・ほかのアプリ（新しいタブで開く）・いまのアプリを別タブで開く -->
+<div class="bar">
+  <div class="strip" id="strip" role="toolbar" aria-label="パネルで開くアプリ"></div>
+  <span class="sep" aria-hidden="true"></span>
+  <button class="ib" id="more" type="button" aria-haspopup="true" aria-expanded="false" title="ほかのアプリ（新しいタブで開く）">ほか ↗</button>
+</div>
+<div class="name" id="name" aria-live="polite"></div>
+<div class="stage" id="stage"><div class="empty" id="empty">上の帯からアプリを選んでください</div></div>
+<div class="pop" id="pop" hidden role="menu" aria-label="ほかのアプリ"></div>
+<script src="apps.js"></script>
+<script src="panel.js"></script>
+<script src="bridge-swipe.js"></script>
+<script src="bridge-x.js"></script>
+</body>
+</html>
