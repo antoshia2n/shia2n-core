@@ -12,7 +12,8 @@
   // 細い画面に渡す許可。FMオレの YouTube は encrypted-media がないと流れない動画がある（元の FMオレのパネルと同じ並び）
   const ALLOW = "clipboard-read; clipboard-write; autoplay; encrypted-media; picture-in-picture; fullscreen";
   const $ = (id) => document.getElementById(id);
-  const strip = $("strip"), stage = $("stage"), nameEl = $("name"), more = $("more"), pop = $("pop"), empty = $("empty"), loading = $("loading");
+  const strip = $("strip"), stage = $("stage"), nameEl = $("appname"), nameBtns = $("namebtns"), more = $("more"), pop = $("pop"), empty = $("empty"), loading = $("loading"), sr = $("sr");
+  const STUCK_MS = 15000; // これだけ待っても読み込みが終わらないときは、覆いを外して中を見せる（「読み込み直す」で直せる）
   const frames = new Map(); // key → iframe
   const pending = new Set(); // 読み込み中の key
   let current = null;
@@ -42,24 +43,26 @@
   });
 
   /* ---- 読み込み中の表示（いま出しているアプリが読み込み中のときだけ） ---- */
+  const stuck = new Map(); // key → 時間切れの印
   function paintLoading() {
     const on = current != null && pending.has(current);
     loading.hidden = !on;
     stage.setAttribute("aria-busy", String(on));
+    sr.textContent = on ? "読み込み中" : ""; // 読み上げは、いつもある 1 つの欄の文を替えて知らせる
   }
+  function done(key) { pending.delete(key); clearTimeout(stuck.get(key)); stuck.delete(key); paintLoading(); }
   function load(key, f, url) {
     pending.add(key); paintLoading();
+    clearTimeout(stuck.get(key)); stuck.set(key, setTimeout(() => done(key), STUCK_MS));
     f.src = url; // 同じ住所を入れ直しても読み込み直す（よその住所の画面なので、中の reload は呼べない）
   }
 
   /* ---- いま開いているアプリの名前と「読み込み直す」「別タブで開く」 ---- */
   function paintName(a) {
-    nameEl.innerHTML = "";
+    nameEl.textContent = a ? a.name : ""; // 名前の欄だけを読み上げる（ボタンは読み上げない）
+    nameBtns.innerHTML = "";
     if (!a) return;
-    const b = el("b");
-    b.textContent = a.name;
-    nameEl.append(b, el("span", { style: "flex:1" }));
-    nameEl.append(
+    nameBtns.append(
       el("button", { class: "ib nb", type: "button", "aria-label": a.name + "を読み込み直す", title: "表示がおかしいときや、ログインし直したあとに", onclick: () => { const f = frames.get(a.key); if (f) load(a.key, f, a.url); } }, "読み込み直す"),
       el("button", { class: "ib nb", type: "button", "aria-label": a.name + "を別タブで開く", onclick: () => openTab(a.open) }, "別タブで開く ↗"),
     );
@@ -73,7 +76,7 @@
     let f = frames.get(key);
     if (!f) {
       f = el("iframe", { title: a.name, allow: ALLOW, allowfullscreen: "" });
-      f.addEventListener("load", () => { pending.delete(key); paintLoading(); });
+      f.addEventListener("load", () => done(key));
       frames.set(key, f);
       stage.append(f);
       load(key, f, a.url);
@@ -111,7 +114,8 @@
   // Tab でメニューの外へ出たら閉じる（「ほか」へ戻るときはそのまま）
   document.addEventListener("focusin", (e) => { if (!pop.hidden && !pop.contains(e.target) && e.target !== more) closePop(false); });
   // アプリの画面（よその住所の iframe）へ移ったときは focusin が来ないので、この画面から外れたときに見る
-  window.addEventListener("blur", () => setTimeout(() => { if (!pop.hidden && document.activeElement && document.activeElement.tagName === "IFRAME") closePop(false); }, 0));
+  // Tab でこのパネルの外（ブラウザの側）へ出たときも同じ
+  window.addEventListener("blur", () => setTimeout(() => { if (!pop.hidden && (!document.hasFocus() || (document.activeElement && document.activeElement.tagName === "IFRAME"))) closePop(false); }, 0));
   document.addEventListener("keydown", (e) => {
     if (pop.hidden) return;
     if (e.key === "Escape") { e.preventDefault(); closePop(true); return; }
