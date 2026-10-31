@@ -2,7 +2,8 @@
  * スワイプくんとのやりとり（swipe-file/swipe-kun-panel/panel.js を写したもの・2026-10-31 統合パネル）。
  * スワイプくんの細い画面（https://swipe.shia2n.jp/panel）から頼まれたときだけ、いま見ているタブを読む・撮る。
  * やりとりの名前（src: "swipe-kun" ⇄ "swipe-kun-ext"）は元のパネルと同じなので、スワイプくん側は直さない。
- * 元のパネルを直したら、ここも同じに直す（下の関数は元と同じ中身）。
+ * 元のパネルを直したら、ここも同じに直す（ページの中で動く関数と撮る処理は元と同じ中身）。
+ * 元と違うのは 2 つだけ（2026-11-01）：読むのはこのパネルの窓の見ているタブ・タブの変化はスワイプくんを出しているときだけ知らせる。
  */
 const SWIPE_ORIGIN = "https://swipe.shia2n.jp";
 const VERSION = chrome.runtime.getManifest().version;
@@ -10,8 +11,12 @@ const swipeFrame = () => window.S2P && window.S2P.frameOf("swipe");
 const post = msg => { const f = swipeFrame(); if (f && f.contentWindow) f.contentWindow.postMessage({ src: "swipe-kun-ext", ...msg }, SWIPE_ORIGIN); };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// このパネルが付いている窓（窓を 2 つ開いていても、自分の窓のタブだけを読む・2026-11-01）
+let swipeWin = null;
+try { chrome.windows.getCurrent(w => { swipeWin = w ? w.id : null; }); } catch { /* 取れなければ前に触った窓を見る */ }
+
 async function activeTab() {
-  const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  const [tab] = await chrome.tabs.query(swipeWin != null ? { active: true, windowId: swipeWin } : { active: true, lastFocusedWindow: true });
   if (!tab) throw new Error("見ているタブが見つかりません");
   if (!/^https?:/.test(tab.url || "")) throw new Error("このページは読めません（Chrome の画面や拡張機能のページなど）");
   return tab;
@@ -275,6 +280,10 @@ addEventListener("message", async e => {
 });
 
 // 見ているタブが変わったら知らせる（画面は読み直す）
-const notify = () => post({ type: "tab" });
-chrome.tabs.onActivated.addListener(notify);
-chrome.tabs.onUpdated.addListener((_, info) => { if (info.status === "complete" || info.url) notify(); });
+// 知らせるのはスワイプくんを出しているときだけ・自分の窓の見ているタブのときだけ（裏のタブが読み込み終わるたびにページを読みに行かない）。
+// 隠れていた間の分は、出したときに 1 回知らせる（2026-11-01）
+const swipeMine = winId => swipeWin == null || winId === swipeWin;
+const notify = () => { if (window.S2P && window.S2P.isShown("swipe")) post({ type: "tab" }); };
+chrome.tabs.onActivated.addListener(info => { if (swipeMine(info.windowId)) notify(); });
+chrome.tabs.onUpdated.addListener((_, info, tab) => { if ((info.status === "complete" || info.url) && tab && tab.active && swipeMine(tab.windowId)) notify(); });
+addEventListener("s2p:show", e => { if (e.detail === "swipe") notify(); });

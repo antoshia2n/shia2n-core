@@ -34,18 +34,26 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .it .l{flex:1}
 .it .r{font-size:12px;color:var(--muted)}
 .empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:13px;padding:24px;text-align:center}
+.name .nb{padding:0 8px;min-width:0;font-size:12px}
+@media (pointer:fine){.name .nb{height:28px}}
+.loading{position:absolute;inset:0;z-index:1;display:grid;place-items:center;background:var(--bg);color:var(--muted);font-size:13px}
+.loading span::before{content:"";display:inline-block;width:12px;height:12px;margin-right:8px;vertical-align:-1px;border:2px solid var(--line);border-top-color:var(--accent-ink);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.loading span::before{animation:none}}
 [hidden]{display:none!important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 </style>
 </head>
 <body>
-<!-- 上の帯：細い画面のあるアプリ（押すとこのパネルの中で切り替わる）・ほかのアプリ（新しいタブで開く）・いまのアプリを別タブで開く -->
+<!-- 上の帯：細い画面のあるアプリ（押すとこのパネルの中で切り替わる）・ほかのアプリ（新しいタブで開く）。いまのアプリの「読み込み直す」「別タブで開く」は下の名前の行 -->
 <div class="bar">
   <div class="strip" id="strip" role="toolbar" aria-label="パネルで開くアプリ"></div>
   <span class="sep" aria-hidden="true"></span>
   <button class="ib" id="more" type="button" aria-haspopup="true" aria-expanded="false" title="ほかのアプリ（新しいタブで開く）">ほか ↗</button>
 </div>
-<div class="name" id="name" aria-live="polite"></div>
-<div class="stage" id="stage"><div class="empty" id="empty">上の帯からアプリを選んでください</div></div>
+<div class="name" id="name"><b id="appname" aria-live="polite"></b><span style="flex:1"></span><span id="namebtns" style="display:flex;gap:2px"></span></div>
+<div class="stage" id="stage"><div class="empty" id="empty">上の帯からアプリを選んでください</div><div class="loading" id="loading" hidden aria-hidden="true"><span>読み込み中…</span></div></div>
+<span class="sr" id="sr" role="status"></span>
 <div class="pop" id="pop" hidden role="menu" aria-label="ほかのアプリ"></div>
 <script src="apps.js"></script>
 <script src="panel.js"></script>
