@@ -187,9 +187,10 @@ function h(tag, attrs, ...kids) {
  *   keys:   [[まとまり, キー, すること], …],  // A の最後に出すキーボードの近道（アプリの一覧をそのまま渡す）
  *   tours:  [{id, title, desc, steps:[{el, title, body, before?}] , before?}],      // B 操作の案内
  *   settings: [{label, note, run(anchor)}],  // アプリ固有の設定（見た目は外枠が持つ）
+ *   theme,                                  // false なら「見た目（自動・明るい・暗い）」を出さない（暗い画面を持たないアプリ・1.10.0）
  *   onViewChange(isMember),                 // 「会員の目で見る」を切り替えたとき
  *   beforeSignOut(),                         // ログアウトの前に待つ（保存を出し切る）。false を返すとログアウトを止める
- *   source,                                 // 試験用の差し替え（user・profile・apps・signOut・watch）
+ *   source,                                 // ログインの読み方（user・profile・apps・gateApps・signOut・watch）。Firebase は shell/firebase-source.js
  * }
  */
 export function mountAppShell(cfg = {}) {
@@ -204,7 +205,7 @@ export function mountAppShell(cfg = {}) {
 
   /* 見た目（自動・明るい・暗い）。アプリの CSS は data-theme を読む（作り方の 1 枚 §5）。覚えるのはアプリの住所ごと */
   const applyTheme = (v) => { if (v === "light" || v === "dark") document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme; };
-  { const t = store.get(THEMEKEY); if (t === "light" || t === "dark") applyTheme(t); }
+  if (cfg.theme !== false) { const t = store.get(THEMEKEY); if (t === "light" || t === "dark") applyTheme(t); }
 
   /* ---- 右上のボタン（置き場所に入る側） ---- */
   const slotHost = h("div", { class: "s2-shell", style: "display:contents" });
@@ -410,13 +411,17 @@ export function mountAppShell(cfg = {}) {
   }
 
   function settingsBuild(p) {
-    p.append(back(p), h("div", { class: "ph" }, "見た目"));
-    const now = store.get(THEMEKEY) || "auto";
-    const seg = h("div", { class: "seg", role: "group", "aria-label": "見た目" });
-    [["auto", "自動"], ["light", "明るい"], ["dark", "暗い"]].forEach(([k, l]) => {
-      seg.append(h("button", { type: "button", "aria-pressed": String(now === k), onclick: () => { store.set(THEMEKEY, k === "auto" ? null : k); applyTheme(k); p.innerHTML = ""; settingsBuild(p); } }, l));
-    });
-    p.append(seg);
+    p.append(back(p));
+    /* 暗い画面を持たないアプリ（cfg.theme が false）では、効かない切り替えを出さない（2026-10-31・1.10.0） */
+    if (cfg.theme !== false) {
+      p.append(h("div", { class: "ph" }, "見た目"));
+      const now = store.get(THEMEKEY) || "auto";
+      const seg = h("div", { class: "seg", role: "group", "aria-label": "見た目" });
+      [["auto", "自動"], ["light", "明るい"], ["dark", "暗い"]].forEach(([k, l]) => {
+        seg.append(h("button", { type: "button", "aria-pressed": String(now === k), onclick: () => { store.set(THEMEKEY, k === "auto" ? null : k); applyTheme(k); p.innerHTML = ""; settingsBuild(p); } }, l));
+      });
+      p.append(seg);
+    }
     const extra = Array.isArray(cfg.settings) ? cfg.settings : [];
     if (extra.length) {
       p.append(h("div", { class: "ph" }, appName + " の設定"));
