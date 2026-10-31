@@ -189,7 +189,7 @@ function h(tag, attrs, ...kids) {
  *   settings: [{label, note, run(anchor)}],  // アプリ固有の設定（見た目は外枠が持つ）
  *   theme,                                  // false なら「見た目（自動・明るい・暗い）」を出さない（暗い画面を持たないアプリ・1.10.0）
  *   onViewChange(isMember),                 // 「会員の目で見る」を切り替えたとき
- *   beforeSignOut(),                         // ログアウトの前に待つ（保存を出し切る）。false を返すとログアウトを止める
+ *   beforeSignOut(),                         // ログアウトの前に待つ（保存を出し切る）。false を返すとログアウトを止める（"cancel" なら知らせを出さずに止める）
  *   source,                                 // ログインの読み方（user・profile・apps・gateApps・signOut・watch）。Firebase は shell/firebase-source.js
  * }
  */
@@ -454,7 +454,11 @@ export function mountAppShell(cfg = {}) {
       lo.disabled = true;
       /* アプリに保存待ちの変更があれば、出し切ってからログアウトする（書いた分を落とさないため） */
       let ok = true;
-      try { if (cfg.beforeSignOut) ok = (await cfg.beforeSignOut()) !== false; } catch { ok = false; }
+      let r = true;
+      try { if (cfg.beforeSignOut) r = await cfg.beforeSignOut(); } catch { r = false; }
+      /* "cancel" は本人が確かめの窓でやめた（知らせは出さない・1.10.0）。false は保存が終わっていない */
+      if (r === "cancel") { lo.disabled = false; return; }
+      ok = r !== false;
       if (!ok) {
         lo.disabled = false;
         if (!p.querySelector(".lo-note")) lo.after(h("div", { class: "pn lo-note" }, "保存が終わっていない変更があるので、ログアウトを止めました。通信が戻ってから、もう一度押してください。"));
