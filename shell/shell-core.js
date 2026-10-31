@@ -446,7 +446,8 @@ export function mountAppShell(cfg = {}) {
     p.append(h("div", { class: "sep" }));
     p.append(item(SVG.book, "使い方（マニュアル）", "", () => { close(); openManual("a", bMe); }));
     p.append(item(SVG.apps, "アプリ一覧", SVG.chev, () => drill((q) => { q.append(back(q)); appsBuild(q); })));
-    p.append(item(SVG.gear, "設定", SVG.chev, () => drill(settingsBuild)));
+    /* 見た目の切り替えもアプリの設定も無いアプリでは、空の画面になるので出さない（1.10.0） */
+    if (cfg.theme !== false || (Array.isArray(cfg.settings) && cfg.settings.length)) p.append(item(SVG.gear, "設定", SVG.chev, () => drill(settingsBuild)));
     p.append(h("div", { class: "sep" }));
     const lo = item(SVG.logout, "ログアウト", "このアプリだけ", async () => {
       if (lo.disabled) return;
@@ -616,6 +617,7 @@ export function mountAppShell(cfg = {}) {
   let hintEl = null, hintT = null;
   function dismissHint() { if (hintEl) { hintEl.remove(); hintEl = null; } store.set(HINTKEY, "1"); }
   function maybeHint() {
+    hintT = null;
     if (hintEl || store.get(HINTKEY) || open || !bHelp.isConnected) return;
     const target = bHelp.offsetParent ? bHelp : bMe;
     if (!target.isConnected || !target.getClientRects().length) return;
@@ -653,6 +655,8 @@ export function mountAppShell(cfg = {}) {
       if (!el) return;
       /* 置き場所を移すだけで、開いている窓（メニュー・マニュアル・案内）は閉じない。
          画面を描くたびに置き場所を作り直すアプリ（X攻略くん）では、閉じると案内の「始める」が何も起こさなくなるため（2026-10-27） */
+      /* 同じ置き場所なら何もしない（毎秒描き直すアプリ（TaskMaster のポモドーロ）で、はじめての案内が点滅して押せなくなるため・1.10.0） */
+      if (slotHost.parentNode === el) { if (!hintEl && !hintT && !store.get(HINTKEY)) hintT = setTimeout(maybeHint, 600); return; }
       if (slotHost.parentNode !== el) { el.appendChild(slotHost); if (open && open.place) requestAnimationFrame(() => { if (open && open.place) open.place(); }); }
       if (hintEl) { hintEl.remove(); hintEl = null; } // 置き場所が変わったら、前の場所を指したままにしない
       clearTimeout(hintT);
