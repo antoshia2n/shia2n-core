@@ -1,6 +1,7 @@
 /**
  * シアニンのアプリのアイコン（形の正本：開発部のプロジェクト資料 claude/icon-rules.md と make_icons.py）。
  * ここは「アプリ一覧」でほかのアプリを見分けるための写し。地の色と絵は icon-rules.md の表と同じ値にする。
+ * 2026-10-31：案件くん・お金を守るくん・個別相談管理・学ぶくん・ポータル・公式サイト・会員管理くん・FMオレを足した（Naoki「OK」12:34）。
  * 住所（ホスト名）で引く。表に無いアプリは灰色の地だけ（文字は載せない決まり）。
  */
 export const APP_ICONS = {
@@ -16,11 +17,20 @@ export const APP_ICONS = {
   "kiroku.shia2n.jp":        { name: "記録くん",       color: "#4338ca", g: '<rect x="5" y="4" width="14" height="16.5" rx="2"/><path d="M8.5 2.8v3M15.5 2.8v3M8.5 10.5h7M8.5 14h7M8.5 17.5h4"/>' },
   "sales-manager.shia2n.jp": { name: "売上管理",       color: "#ca8a04", g: '<circle cx="12" cy="12" r="8.5"/><path d="M8.8 7.2 12 11.5l3.2-4.3M12 11.5v6M9.2 12.8h5.6M9.2 15.5h5.6"/>' },
   "note-koryaku.shia2n.jp":  { name: "note攻略くん",   color: "#9f1239", g: '<path d="M6 3.5h8.5L18 7v13.5H6z"/><path d="M14.5 3.5V7H18"/><path d="M12 18c-2.6-1.7-4.2-3.2-4.2-4.9a2.1 2.1 0 0 1 4.2-.5 2.1 2.1 0 0 1 4.2.5c0 1.7-1.6 3.2-4.2 4.9z"/>' },
+  "anken.shia2n.jp":         { name: "案件くん",       color: "#724128", g: '<rect x="3.5" y="7.5" width="17" height="12" rx="2"/><path d="M9 7.5V5.6c0-.9.7-1.6 1.6-1.6h2.8c.9 0 1.6.7 1.6 1.6v1.9"/><path d="M3.5 12.5h17M12 11.3v2.4"/>' },
+  "okane.shia2n.jp":         { name: "お金を守るくん", color: "#16724c", g: '<path d="M12 3.2 19 6v5.6c0 4.3-2.9 7.6-7 9.2-4.1-1.6-7-4.9-7-9.2V6z"/><path d="M9.4 8.2 12 11.6l2.6-3.4M12 11.6v4.9M9.8 12.9h4.4M9.8 15h4.4"/>' },
+  "consult-manager.shia2n.jp":{ name: "個別相談管理",  color: "#218fa5", g: '<path d="M3.5 6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9.2L6 15.8V13h-.5a2 2 0 0 1-2-2z"/><path d="M18.5 9.2a2 2 0 0 1 2 2v4.3a2 2 0 0 1-2 2H18v2.6l-3.1-2.6H12a2 2 0 0 1-1.9-1.4"/>' },
+  "manabu.shia2n.jp":        { name: "学ぶくん",       color: "#8c1c70", g: '<path d="M12 6.8C10 5.3 7.2 4.8 4 5.3v13c3.2-.5 6 0 8 1.5 2-1.5 4.8-2 8-1.5v-13c-3.2-.5-6 0-8 1.5z"/><path d="M12 6.8v13"/>' },
+  "portal.shia2n.jp":        { name: "ポータル",       color: "#286672", g: '<path d="M13 3.5h5a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5h-5"/><path d="M4 12h10M10.5 8.5 14 12l-3.5 3.5"/>' },
+  "evolab.shia2n.jp":        { name: "公式サイト",     color: "#075f8c", g: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.4 2.6 3.5 5.4 3.5 8.5s-1.1 5.9-3.5 8.5c-2.4-2.6-3.5-5.4-3.5-8.5S9.6 6.1 12 3.5z"/>' },
+  "members.shia2n.jp":       { name: "会員管理くん",   color: "#725705", g: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><circle cx="8.6" cy="10.6" r="2"/><path d="M5.8 15.6c.5-1.4 1.6-2.2 2.8-2.2s2.3.8 2.8 2.2"/><path d="M13.5 10h4.5M13.5 13.5h3.5"/>' },
+  "fm-ore.pages.dev":        { name: "FMオレ",         color: "#57534e", g: '<rect x="3.5" y="9" width="17" height="11.5" rx="2.2"/><path d="M7 9 17.5 3.5"/><circle cx="15.5" cy="14.75" r="2.6"/><path d="M6.8 13h4.2M6.8 16.5h4.2"/>' },
 };
 
 const LEAF = "M44 0H114A14 14 0 0 1 128 14V84A44 44 0 0 1 84 128H14A14 14 0 0 1 0 114V44A44 44 0 0 1 44 0Z";
 const WAVE = "M0 128V58C34 58 40 82 64 82S94 104 128 104V128Z";
 let seq = 0;
+const DARK = new Set(["#334155", "#57534e", "#1c1917"]);
 
 /** 住所（https:// が無くてもよい）からホスト名だけを取る */
 export function hostOf(url) {
@@ -35,7 +45,7 @@ export function iconSvg(host, px = 24) {
   const a = APP_ICONS[host];
   const col = a ? a.color : "#a8a09a";
   const id = "s2i" + (++seq);
-  const op = col === "#334155" ? 0.30 : 0.22;
+  const op = DARK.has(col) ? 0.30 : 0.22; // 濃い灰色・墨の地は波を濃く（icon-rules.md）
   const bite = '<circle cx="132" cy="40" r="19"/><circle cx="-4" cy="90" r="19"/>';
   const glyph = a ? `<g transform="translate(14 14) scale(4.17)" fill="none" stroke="#fff" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round">${a.g}</g>` : "";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${px}" height="${px}" viewBox="0 0 128 128" aria-hidden="true">`

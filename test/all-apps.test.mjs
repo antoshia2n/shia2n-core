@@ -51,3 +51,10 @@ test("会員の一覧：いま開いているアプリ・ポータル・名簿�
   assert.deepEqual(out.map((x) => x.name), ["note攻略くん", "スワイプくん"]);
   assert.deepEqual(memberAppItems(null, "x"), []);
 });
+
+test("名簿のアプリには、置かないと決めた 3 つ（Zeus・Pay-kun・appdev-kun）を除いてアイコンがある（2026-10-31 Naoki）", async () => {
+  const { APP_ICONS } = await import("../shell/icons.js");
+  const skip = new Set(["zeus.shia2n.jp", "pay-kun.shia2n.jp", "appdev-kun.pages.dev"]);
+  const missing = ALL_APPS.filter((a) => !skip.has(a.host) && !APP_ICONS[a.host]).map((a) => a.host);
+  assert.deepEqual(missing, []);
+});
