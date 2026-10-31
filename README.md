@@ -20,6 +20,8 @@ Naoki の全アプリで共有する中核モジュール。AuthGuard、Firebase
 
 ### 認証
 
+1.10.0（2026-10-31）：外枠を、Firebase を読まない本体 shell/shell-core.js と今までどおりの入口 shell/app-shell.js に分けた。自前の Firebase の初期化を持つアプリ・Firebase でログインしないアプリは shell-core.js を読み、cfg.source にログインの読み方を渡す（Firebase なら shell/firebase-source.js の firebaseSource(auth, db)）。あわせてアイコンを 8 つ足した（案件くん・お金を守るくん・個別相談管理・学ぶくん・ポータル・公式サイト・会員管理くん・FMオレ）
+
 1.9.0（2026-10-28）：右上のアプリ一覧を、会員（管理者ではない人）には門番 /gate/resolve の apps（権利の表 member_access）で出す。管理者の一覧（全アプリを使った順）と「会員の目で見る」は今までどおり
 
 1.7.0（2026-10-27）：管理者（Firestore の role が admin）以外は、門番 /gate/resolve の apps にアプリの名前があるときだけ通す。表 member_access に行が無いアプリは会員に閉じたまま
