@@ -11,9 +11,21 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.
 body{display:flex;flex-direction:column}
 button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
 :focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px;border-radius:8px}
-.bar{display:flex;align-items:center;gap:4px;padding:6px 6px;border-bottom:1px solid var(--line);background:var(--panel);flex:none}
-.strip{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;flex:1;min-width:0;mask-image:linear-gradient(90deg,#000 calc(100% - 18px),transparent)}
+.bar{position:relative;display:flex;align-items:center;gap:4px;padding:3px 6px 6px;border-bottom:1px solid var(--line);background:var(--panel);flex:none}
+.stripwrap{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.strip{display:flex;gap:2px;overflow-x:auto;overflow-y:hidden;min-width:0;cursor:grab;overscroll-behavior-x:contain;scrollbar-width:none;position:relative;z-index:1;padding-block:3px;scroll-padding-inline:22px}
 .strip::-webkit-scrollbar{display:none}
+.strip.dragging{cursor:grabbing;user-select:none}
+.strip.dragging .ab{pointer-events:none}
+/* 帯の下のスライダー（いつも見える・つまみを引く／溝を押すと横に動く）。Mac の重ね表示のスクロールバーは隠れるので自前で描く */
+.slider{position:relative;height:6px;margin:0 4px 1px;border-radius:3px;background:var(--line);cursor:pointer;touch-action:none}
+.slider::before{content:"";position:absolute;left:0;right:0;top:-4px;bottom:-18px} /* 押せる範囲 28px（上は帯の下の余白まで・下は名前の行へ。名前の行のボタンはその上に出す） */
+.slider .th{position:absolute;top:0;bottom:0;left:0;border-radius:3px;background:var(--muted);cursor:grab}
+.slider .th:hover,.slider.dragging .th{background:var(--fg)}
+.slider.dragging .th{cursor:grabbing}
+.strip.r{mask-image:linear-gradient(90deg,#000 calc(100% - 22px),transparent)}
+.strip.l{mask-image:linear-gradient(90deg,transparent,#000 22px)}
+.strip.l.r{mask-image:linear-gradient(90deg,transparent,#000 22px,#000 calc(100% - 22px),transparent)}
 .ab{width:44px;height:44px;flex:none;display:grid;place-items:center;border-radius:10px;position:relative}
 .ab:hover{background:var(--soft)}
 .ab[aria-pressed="true"]{background:var(--accent-bg)}
@@ -39,10 +51,8 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .go{flex:none;width:44px;min-height:44px;border-radius:8px;color:var(--muted);font-size:13px;font-weight:700}
 @media (pointer:fine){.go{width:34px;min-height:34px}}
 .go:hover,.go:focus-visible{background:var(--soft);color:var(--fg)}
-.ib.on{background:var(--accent-bg);color:var(--accent-ink);position:relative}
-.ib.on::after{content:"";position:absolute;left:10px;right:10px;bottom:3px;height:3px;border-radius:2px;background:var(--accent-ink)}
 .empty{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:13px;padding:24px;text-align:center}
-.name .nb{padding:0 8px;min-width:0;font-size:12px}
+.name .nb{padding:0 8px;min-width:0;font-size:12px;position:relative;z-index:2}
 @media (pointer:fine){.name .nb{height:28px}}
 .loading{position:absolute;inset:0;z-index:1;display:grid;place-items:center;background:var(--bg);color:var(--muted);font-size:13px}
 .loading span::before{content:"";display:inline-block;width:12px;height:12px;margin-right:8px;vertical-align:-1px;border:2px solid var(--line);border-top-color:var(--accent-ink);border-radius:50%;animation:spin .8s linear infinite}
@@ -53,16 +63,16 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 </style>
 </head>
 <body>
-<!-- 上の帯：細い画面のあるアプリ（押すとこのパネルの中で切り替わる）・ほかのアプリ（「ほか ▼」から。押すとパネルの中・↗ で新しいタブ）。いまのアプリの「読み込み直す」「別タブで開く」は下の名前の行 -->
+<!-- 上の帯：全アプリを左から使った順（押すとこのパネルの中で切り替わる・横に動かせる）。「一覧 ▼」は名前で選ぶ・↗ で新しいタブ。いまのアプリの「読み込み直す」「別タブで開く」は下の名前の行 -->
 <div class="bar">
-  <div class="strip" id="strip" role="toolbar" aria-label="パネルで開くアプリ"></div>
+  <div class="stripwrap"><div class="strip l r" id="strip" role="toolbar" aria-label="アプリ（左から使った順）"></div><div class="slider" id="slider" aria-hidden="true"><div class="th" id="thumb"></div></div></div>
   <span class="sep" aria-hidden="true"></span>
-  <button class="ib" id="more" type="button" aria-haspopup="true" aria-expanded="false" title="ほかのアプリ（パネルで開く・↗ で新しいタブ）">ほか ▼</button>
+  <button class="ib" id="more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="アプリの一覧" title="アプリの一覧（名前で選ぶ・↗ で新しいタブ）">一覧 ▼</button>
 </div>
 <div class="name" id="name"><b id="appname" aria-live="polite"></b><span style="flex:1"></span><span id="namebtns" style="display:flex;gap:2px"></span></div>
 <div class="stage" id="stage"><div class="empty" id="empty">上の帯からアプリを選んでください</div><div class="loading" id="loading" hidden aria-hidden="true"><span id="loadmsg">読み込み中…</span></div></div>
 <span class="sr" id="sr" role="status"></span>
-<div class="pop" id="pop" hidden role="menu" aria-label="ほかのアプリ"></div>
+<div class="pop" id="pop" hidden role="menu" aria-label="アプリの一覧"></div>
 <script src="apps.js"></script>
 <script src="panel.js"></script>
 <script src="bridge-swipe.js"></script>
