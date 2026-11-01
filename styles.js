@@ -7,7 +7,7 @@ export const card = {
 };
 
 export const lb10 = {
-  fontSize:      10,
+  fontSize:      12,
   fontWeight:    600,
   color:         T.muted,
   letterSpacing: "0.5px",
@@ -38,7 +38,7 @@ export const solidBtn = (bg = T.text, color = "#fff") => ({
   border:      "none",
   borderRadius: 7,
   padding:     "6px 14px",
-  fontSize:    11,
+  fontSize:    12,
   fontWeight:  700,
   cursor:      "pointer",
   fontFamily:  "inherit",
@@ -58,7 +58,7 @@ export const ghostBtn = {
   alignItems:   "center",
   gap:          4,
   color:        T.muted,
-  fontSize:     11,
+  fontSize:     12,
   fontFamily:   "inherit",
   transition:   "opacity 0.15s",
 };
