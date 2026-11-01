@@ -10,6 +10,8 @@
  * 4 便目（1.3.0・Naoki「上のアイコンをスライダーで全部スライドできるように・左から使用履歴順に」）：
  *   上の帯に全アプリを並べ、左から使った順にする。押した直後に並びが動くと押し間違えるので、並べ替えはマウスと選択が帯を離れてから。
  *   帯は下の細いつまみ・ホイール・つかんで引く、のどれでも横に動く。「一覧 ▼」は全アプリを名前で並べる（↗ は新しいタブ）。
+ * 5 便目（1.4.0・Naoki「サイドパネルの UI・UX を踏まえたデザインの細かい調整」）：アイコンに名前の札（すぐ出る・キーボードでも）・
+ *   名前の行にいまのアプリのアイコン・スライダーを細く。
  */
 (() => {
   const APPS = window.S2P_APPS || { panel: [], tab: [] };
@@ -22,7 +24,7 @@
   // 細い画面に渡す許可。FMオレの YouTube は encrypted-media がないと流れない動画がある（元の FMオレのパネルと同じ並び）
   const ALLOW = "clipboard-read; clipboard-write; autoplay; encrypted-media; picture-in-picture; fullscreen";
   const $ = (id) => document.getElementById(id);
-  const strip = $("strip"), stage = $("stage"), nameEl = $("appname"), nameBtns = $("namebtns"), more = $("more"), pop = $("pop"), empty = $("empty"), loading = $("loading"), loadMsg = $("loadmsg"), sr = $("sr");
+  const strip = $("strip"), stage = $("stage"), nameEl = $("appname"), nameBtns = $("namebtns"), more = $("more"), pop = $("pop"), empty = $("empty"), loading = $("loading"), nameIcon = $("appicon"), loadMsg = $("loadmsg"), sr = $("sr");
   const STUCK_MS = 15000; // これだけ待っても読み込みが終わらないときは、覆いを外して中を見せる（「読み込み直す」で直せる）
   const frames = new Map(); // key → iframe
   const pending = new Set(); // 読み込み中の key
@@ -52,7 +54,7 @@
   /** 使った順に並べ、まだ使っていないアプリは元の並び（細い画面のあるアプリ → 無いアプリ）で後ろへ */
   const ordered = () => [...history.map((k) => ALL.find((a) => a.key === k)).filter(Boolean), ...ALL.filter((a) => !history.includes(a.key))];
   ALL.forEach((a) => {
-    strip.append(el("button", { class: "ab", type: "button", "data-key": a.key, "aria-pressed": "false", "aria-label": a.name + "をパネルで開く", title: a.name, onclick: () => { if (!dragged) select(a.key); } }, icon(a, 22)));
+    strip.append(el("button", { class: "ab", type: "button", "data-key": a.key, "aria-pressed": "false", "aria-label": a.name + "をパネルで開く", onclick: () => { if (!dragged) select(a.key); } }, icon(a, 22)));
   });
   const reduce = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   let reorderWaiting = false, reorderTimer = 0;
@@ -86,11 +88,45 @@
   // アプリの画面（よその住所の枠）へマウスが入ると、帯の pointerleave が来ないことがあるので、ほかの所に触れた・この画面から外れた、でも見る
   document.addEventListener("pointerover", (e) => { if (reorderWaiting && e.pointerType === "mouse" && !strip.contains(e.target)) reorder(false, true); });
   window.addEventListener("blur", () => { if (reorderWaiting) setTimeout(() => reorder(false, true), 0); });
+  // 名前の札も同じ：帯の外に触れた・この画面から外れたら外す（アプリの画面へ直に入ると pointerleave が来ないことがある）
+  document.addEventListener("pointerover", (e) => { if (!strip.contains(e.target)) hideTip(); });
+  window.addEventListener("blur", () => hideTip());
   function used(key) {
     history = [key, ...history.filter((k) => k !== key && ALL.some((a) => a.key === k))];
     store.set({ [LAST]: key, [ORDER]: history });
     reorder(false);
   }
+
+  /* ---- アイコンの名前の札（title は出るまで遅く 20 個を見分けにくいので、自前ですぐ出す） ---- */
+  const tip = $("tip");
+  let tipTimer = 0, tipFor = null;
+  function showTip(b, now) {
+    if (!now && tipFor === b && !tip.hidden) return; // 同じアイコンの中を動いているだけ
+    if (!now && tipFor === b && tipTimer) return;   // 待っている最中（アイコンの中の絵ごとに来る知らせで待ち直さない）
+    clearTimeout(tipTimer); tipFor = b;
+    tipTimer = setTimeout(() => {
+      tipTimer = 0;
+      if (dragged || !b.isConnected) return;
+      const r = b.getBoundingClientRect(), sr = strip.getBoundingClientRect();
+      if (r.right <= sr.left || r.left >= sr.right) return hideTip(); // 帯の外へ流れたアイコンには付けない
+      const a = ALL.find((x) => x.key === b.dataset.key); if (!a) return;
+      tip.textContent = a.name; tip.hidden = false;
+      const w = tip.offsetWidth;
+      tip.style.left = Math.max(4, Math.min(window.innerWidth - w - 4, r.left + r.width / 2 - w / 2)) + "px";
+      tip.style.top = (r.bottom + 6) + "px";
+      // マウスで出した札は 5 秒で外す（アプリの画面へ一気に入ったときは外す知らせが来ないことがあるため）
+      if (!b.matches(":focus-visible")) tipTimer = setTimeout(hideTip, 5000);
+    }, now ? 0 : 250);
+  }
+  function hideTip() { clearTimeout(tipTimer); tipTimer = 0; tipFor = null; tip.hidden = true; }
+  strip.addEventListener("pointerover", (e) => { const b = e.target.closest(".ab"); if (b && e.pointerType === "mouse") showTip(b, !tip.hidden); });
+  strip.addEventListener("pointerleave", hideTip);
+  strip.addEventListener("pointerdown", hideTip);
+  strip.addEventListener("focusin", (e) => { const b = e.target.closest(".ab"); if (b && b.matches(":focus-visible")) showTip(b, true); });
+  strip.addEventListener("focusout", hideTip);
+  // 帯が動いたら札を外す。キーボードで選んでいる間は、選んでいるアイコンの下へ付け直す（←→ で帯が動くため）
+  strip.addEventListener("scroll", () => { const f = strip.querySelector(".ab:focus-visible"); if (f) showTip(f, true); else hideTip(); }, { passive: true });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTip(); });
 
   /* ---- 帯を横に動かす：下のスライダー・ホイール・つかんで引く ---- */
   const slider = $("slider"), thumb = $("thumb");
@@ -170,6 +206,7 @@
   /* ---- いま開いているアプリの名前と「読み込み直す」「別タブで開く」 ---- */
   function paintName(a) {
     nameEl.textContent = a ? a.name : ""; // 名前の欄だけを読み上げる（ボタンは読み上げない）
+    nameIcon.innerHTML = a ? icon(a, 16) : "";
     nameBtns.innerHTML = "";
     if (!a) return;
     nameBtns.append(

@@ -18,9 +18,9 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .strip.dragging{cursor:grabbing;user-select:none}
 .strip.dragging .ab{pointer-events:none}
 /* 帯の下のスライダー（いつも見える・つまみを引く／溝を押すと横に動く）。Mac の重ね表示のスクロールバーは隠れるので自前で描く */
-.slider{position:relative;height:6px;margin:0 4px 1px;border-radius:3px;background:var(--line);cursor:pointer;touch-action:none}
-.slider::before{content:"";position:absolute;left:0;right:0;top:-4px;bottom:-18px} /* 押せる範囲 28px（上は帯の下の余白まで・下は名前の行へ。名前の行のボタンはその上に出す） */
-.slider .th{position:absolute;top:0;bottom:0;left:0;border-radius:3px;background:var(--muted);cursor:grab}
+.slider{position:relative;height:4px;margin:1px 4px 2px;border-radius:2px;background:var(--line);cursor:pointer;touch-action:none}
+.slider::before{content:"";position:absolute;left:0;right:0;top:-5px;bottom:-19px} /* 押せる範囲 28px（上は帯の下の余白まで・下は名前の行へ。名前の行のボタンはその上に出す） */
+.slider .th{position:absolute;top:0;bottom:0;left:0;border-radius:2px;background:var(--muted);cursor:grab}
 .slider .th:hover,.slider.dragging .th{background:var(--fg)}
 .slider.dragging .th{cursor:grabbing}
 .strip.r{mask-image:linear-gradient(90deg,#000 calc(100% - 22px),transparent)}
@@ -58,6 +58,9 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
 .loading span::before{content:"";display:inline-block;width:12px;height:12px;margin-right:8px;vertical-align:-1px;border:2px solid var(--line);border-top-color:var(--accent-ink);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.loading span::before{animation:none}}
+.tip{position:fixed;z-index:20;pointer-events:none;background:var(--fg);color:var(--bg);font-size:12px;font-weight:700;line-height:1;padding:6px 8px;border-radius:6px;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.18)}
+.name .ai{display:inline-flex;flex:none}
+.name .ai:empty{display:none}
 [hidden]{display:none!important}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 </style>
@@ -69,9 +72,10 @@ button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:poin
   <span class="sep" aria-hidden="true"></span>
   <button class="ib" id="more" type="button" aria-haspopup="true" aria-expanded="false" aria-label="アプリの一覧" title="アプリの一覧（名前で選ぶ・↗ で新しいタブ）">一覧 ▼</button>
 </div>
-<div class="name" id="name"><b id="appname" aria-live="polite"></b><span style="flex:1"></span><span id="namebtns" style="display:flex;gap:2px"></span></div>
+<div class="name" id="name"><span class="ai" id="appicon" aria-hidden="true"></span><b id="appname" aria-live="polite"></b><span style="flex:1"></span><span id="namebtns" style="display:flex;gap:2px"></span></div>
 <div class="stage" id="stage"><div class="empty" id="empty">上の帯からアプリを選んでください</div><div class="loading" id="loading" hidden aria-hidden="true"><span id="loadmsg">読み込み中…</span></div></div>
 <span class="sr" id="sr" role="status"></span>
+<div class="tip" id="tip" hidden aria-hidden="true"></div>
 <div class="pop" id="pop" hidden role="menu" aria-label="アプリの一覧"></div>
 <script src="apps.js"></script>
 <script src="panel.js"></script>
