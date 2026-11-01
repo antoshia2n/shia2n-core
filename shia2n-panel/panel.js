@@ -5,14 +5,20 @@
  * スワイプくん・X攻略くんの「見ているページを読む」は bridge-swipe.js・bridge-x.js（元の各パネルと同じやりとり）。
  * 2 便目：読み込み中の表示・「読み込み直す」・FMオレの動画に要る許可（暗号化した動画・全画面・小窓）を元のパネルにそろえた・
  *   隠れているアプリにはタブの変化を知らせず、出したときに 1 回知らせる（S2P.isShown と "s2p:show"）・メニューの外へ Tab で出たら閉じる。
+ * 3 便目（1.2.0）：「ほか ▼」のアプリ（細い画面の無いアプリ）も、押すとふつうの画面をそのままパネルの中に出す。行の右の ↗ は新しいタブ。
+ *   ほかのアプリの画面は重いので、隠して残すのは最後に開いた 3 つまで（それより古いものは閉じる。上の帯のアプリは閉じない）。
  */
 (() => {
   const APPS = window.S2P_APPS || { panel: [], tab: [] };
+  const ALL = [...APPS.panel, ...APPS.tab];
+  const isTab = (key) => APPS.tab.some((a) => a.key === key);
+  const KEEP_TAB = 3; // 「ほか」のアプリの画面を隠して残す数
+  const tabOrder = []; // 「ほか」のアプリを開いた順（古い → 新しい）
   const LAST = "s2p:last";
   // 細い画面に渡す許可。FMオレの YouTube は encrypted-media がないと流れない動画がある（元の FMオレのパネルと同じ並び）
   const ALLOW = "clipboard-read; clipboard-write; autoplay; encrypted-media; picture-in-picture; fullscreen";
   const $ = (id) => document.getElementById(id);
-  const strip = $("strip"), stage = $("stage"), nameEl = $("appname"), nameBtns = $("namebtns"), more = $("more"), pop = $("pop"), empty = $("empty"), loading = $("loading"), sr = $("sr");
+  const strip = $("strip"), stage = $("stage"), nameEl = $("appname"), nameBtns = $("namebtns"), more = $("more"), pop = $("pop"), empty = $("empty"), loading = $("loading"), loadMsg = $("loadmsg"), sr = $("sr");
   const STUCK_MS = 15000; // これだけ待っても読み込みが終わらないときは、覆いを外して中を見せる（「読み込み直す」で直せる）
   const frames = new Map(); // key → iframe
   const pending = new Set(); // 読み込み中の key
@@ -47,6 +53,8 @@
   function paintLoading() {
     const on = current != null && pending.has(current);
     loading.hidden = !on;
+    // 「ほか」のアプリは、よそから枠に入れるのを断る画面（ログイン画面など）だと黙って出ないことがあるので、逃げ道を書いておく
+    loadMsg.textContent = on && isTab(current) ? "読み込み中…（出ないときは上の「別タブで開く ↗」）" : "読み込み中…";
     stage.setAttribute("aria-busy", String(on));
     sr.textContent = on ? "読み込み中" : ""; // 読み上げは、いつもある 1 つの欄の文を替えて知らせる
   }
@@ -68,11 +76,22 @@
     );
   }
 
+  /** 「ほか」のアプリの画面が KEEP_TAB を超えたら、古いものから閉じる（いま出しているものは閉じない） */
+  function trimTabFrames(key) {
+    const i = tabOrder.indexOf(key); if (i >= 0) tabOrder.splice(i, 1);
+    tabOrder.push(key);
+    while (tabOrder.length > KEEP_TAB) {
+      const old = tabOrder.shift(), f = frames.get(old);
+      if (f) { f.remove(); frames.delete(old); done(old); }
+    }
+  }
+
   function select(key) {
-    const a = APPS.panel.find((x) => x.key === key);
+    const a = ALL.find((x) => x.key === key);
     if (!a) return;
     const changed = current !== key;
     current = key;
+    if (isTab(key)) trimTabFrames(key);
     let f = frames.get(key);
     if (!f) {
       f = el("iframe", { title: a.name, allow: ALLOW, allowfullscreen: "" });
@@ -85,6 +104,8 @@
     empty.hidden = true;
     paintLoading();
     strip.querySelectorAll(".ab").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.key === key)));
+    more.classList.toggle("on", isTab(key)); // 「ほか」のアプリを出しているときは「ほか」に印
+    more.setAttribute("aria-label", isTab(key) ? `ほかのアプリ（いま${a.name}を表示中）` : "ほかのアプリ");
     const btn = strip.querySelector(`[data-key="${key}"]`);
     if (btn) btn.scrollIntoView({ inline: "nearest", block: "nearest" });
     paintName(a);
@@ -93,7 +114,7 @@
     if (changed) window.dispatchEvent(new CustomEvent("s2p:show", { detail: key }));
   }
 
-  /* ---- ほかのアプリ（新しいタブで開く） ---- */
+  /* ---- ほかのアプリ（押すとパネルの中に出す・↗ は新しいタブ） ---- */
   function closePop(back) {
     if (pop.hidden) return;
     pop.hidden = true; more.setAttribute("aria-expanded", "false");
@@ -103,9 +124,14 @@
   function onDown(e) { if (!pop.contains(e.target) && !more.contains(e.target)) closePop(false); }
   function openPop() {
     pop.innerHTML = "";
-    pop.append(el("h2", {}, "新しいタブで開く"));
-    APPS.tab.forEach((a) => pop.append(el("button", { class: "it", type: "button", role: "menuitem", onclick: () => { closePop(true); openTab(a.open); } }, icon(a, 20) + `<span class="l"></span><span class="r">↗</span>`)));
-    pop.querySelectorAll(".it .l").forEach((s, i) => { s.textContent = APPS.tab[i].name; });
+    pop.append(el("h2", { role: "presentation" }, "パネルで開く（↗ は新しいタブ）"));
+    APPS.tab.forEach((a) => {
+      const row = el("div", { class: "row", role: "none" });
+      const main = el("button", { class: "it", type: "button", role: "menuitem", "aria-current": String(current === a.key), onclick: () => { closePop(true); select(a.key); } }, icon(a, 20) + `<span class="l"></span>`);
+      main.querySelector(".l").textContent = a.name;
+      const go = el("button", { class: "go", type: "button", role: "menuitem", "aria-label": a.name + "を新しいタブで開く", title: "新しいタブで開く", onclick: () => { closePop(true); openTab(a.open); } }, "↗");
+      row.append(main, go); pop.append(row);
+    });
     pop.hidden = false; more.setAttribute("aria-expanded", "true");
     const first = pop.querySelector(".it"); if (first) first.focus();
     setTimeout(() => document.addEventListener("pointerdown", onDown, true), 0);
@@ -119,10 +145,16 @@
   document.addEventListener("keydown", (e) => {
     if (pop.hidden) return;
     if (e.key === "Escape") { e.preventDefault(); closePop(true); return; }
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-      const its = [...pop.querySelectorAll(".it")], i = its.indexOf(document.activeElement);
-      e.preventDefault(); its[(i + (e.key === "ArrowDown" ? 1 : -1) + its.length) % its.length].focus();
-    }
+    // ↑↓ は行を移る（同じ列のまま）・←→ は行の中で「パネルで開く」と「↗」を切り替える・Home／End は最初と最後の行
+    const rows = [...pop.querySelectorAll(".row")];
+    if (!rows.length) return;
+    const a = document.activeElement, r = rows.findIndex((x) => x.contains(a)), col = a && a.classList.contains("go") ? 1 : 0;
+    const at = (ri, c) => rows[ri].querySelectorAll(".it,.go")[c].focus();
+    if (e.key === "ArrowDown") { e.preventDefault(); at(r < 0 ? 0 : (r + 1) % rows.length, col); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); at(r < 0 ? rows.length - 1 : (r - 1 + rows.length) % rows.length, col); }
+    else if (e.key === "Home") { e.preventDefault(); at(0, col); }
+    else if (e.key === "End") { e.preventDefault(); at(rows.length - 1, col); }
+    else if ((e.key === "ArrowRight" || e.key === "ArrowLeft") && r >= 0) { e.preventDefault(); at(r, e.key === "ArrowRight" ? 1 : 0); }
   });
   /* 帯の中は ← → でも選べる（並びの中を移るだけ。開くのは Enter か押す） */
   strip.addEventListener("keydown", (e) => {
@@ -134,5 +166,5 @@
 
   window.S2P = { frameOf: (key) => frames.get(key) || null, isShown: (key) => current === key, select };
 
-  store.get().then((k) => select(APPS.panel.some((a) => a.key === k) ? k : (APPS.panel[0] || {}).key));
+  store.get().then((k) => select(ALL.some((a) => a.key === k) ? k : (APPS.panel[0] || {}).key));
 })();
