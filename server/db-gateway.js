@@ -49,7 +49,7 @@ function jsonResponse(status, payload) {
 }
 
 function errorResponse(err) {
-  const status = err instanceof GatewayError ? err.status : 500;
+  const status = err instanceof GatewayError || (Number.isInteger(err?.status) && err.status >= 400 && err.status <= 599) ? err.status : 500;
   return jsonResponse(status, {
     message: err.message || "処理できませんでした",
     hint:    err.hint || "",
@@ -181,6 +181,8 @@ function forcedInsertValue(column, condition) {
  *     取り出し・書き換え・削除に必ずこの条件を足す。画面が外しても効く。
  *     新しい行を作るときは、同じ値を強制的に入れて絞り込みの内側に置く。
  *     eq. 以外の条件を書いた表では、入れる値が決まらないため作成を断る。
+ *   - 人に付ける表（2026-11-02）： { 表名: { personal: true } }
+ *     resolveOwner で場所に切り替えていても、この表だけは本人の番号で絞る（別のアプリの正本を読む表など）。
  *   readOnly / force はどちらも任意。書かなければ従来どおりの動きになる。
  * @param {string[]|object} options.functions  呼んでよいデータベース関数
  *   - 従来どおりの書き方（名前だけ）： ["sw_increment_ref"]
@@ -191,12 +193,16 @@ function forcedInsertValue(column, condition) {
  *     対象にすること（関数を直さないと、引数が増えるだけで絞り込みは効かない）。
  *     この書き方をした関数は、中身を差し替える必要があるため POST だけを通す。
  * @param {string[]} options.allowUids  ここに挙げた利用者だけ通す。空なら全員通す。
+ * @param {Function} options.resolveOwner  任意（2026-11-02・場所）。async ({ uid, request, env }) => 持ち主の列に入れる値。
+ *   書かなければ本人の番号（uid）。場所に分けるアプリは server/workspace.js の resolveWorkspaceOwner を渡す。
+ *   投げた誤りに status があれば、その番号で返す（入っていない場所は 403）。
  */
 export function createDbGateway({
   basePath = "/api/db",
   tables = {},
   functions = [],
   allowUids = [],
+  resolveOwner = null,
 } = {}) {
   const base       = basePath.replace(/\/+$/, "");
   const allowList  = Array.isArray(allowUids) ? allowUids.filter(Boolean) : [];
@@ -249,11 +255,16 @@ export function createDbGateway({
         throw new GatewayError(403, "この利用者にはこの画面のデータを扱う許可がありません。");
       }
 
+      // 持ち主の列に入れる値（ふだんは本人の番号。場所に分けるアプリでは入っている場所の番号）
+      const owner = typeof resolveOwner === "function" ? await resolveOwner({ uid, request, env }) : uid;
+      if (typeof owner !== "string" || !owner) throw new GatewayError(403, "持ち主を決められませんでした。");
+
       // ── 2. 触ってよいものかを確かめる ──────────────────────────────────
       let targetPath;
       let ownerColumn = null;
       let forceFilter = null;
       let rpcOwnerArg = null;
+      let rowOwner    = owner; // この表・関数で持ち主の列に入れる値
 
       if (isRpc) {
         const fn = segments[1] ?? "";
@@ -291,6 +302,8 @@ export function createDbGateway({
           throw new GatewayError(403, "この表は読み取り専用です。");
         }
 
+        if (conf.personal === true) rowOwner = uid;
+
         // 決まった絞り込み（例：使用中の行だけ）
         forceFilter =
           conf.force && typeof conf.force === "object" ? conf.force : null;
@@ -307,7 +320,7 @@ export function createDbGateway({
       }
 
       if (ownerColumn && method !== "POST") {
-        params.append(ownerColumn, `eq.${uid}`);
+        params.append(ownerColumn, `eq.${rowOwner}`);
       }
 
       // 決まった絞り込みを足す。画面が同じ列を送ってきても、条件が並ぶと
@@ -336,7 +349,7 @@ export function createDbGateway({
             if (Array.isArray(parsed) || parsed === null || typeof parsed !== "object") {
               throw new GatewayError(400, "この処理の送信内容の形が想定と異なります。");
             }
-            body = JSON.stringify({ ...parsed, [rpcOwnerArg]: uid });
+            body = JSON.stringify({ ...parsed, [rpcOwnerArg]: rowOwner });
           }
         } else {
           let parsed;
@@ -348,7 +361,7 @@ export function createDbGateway({
           const stamp = row => {
             const next = { ...row };
             if (ownerColumn) {
-              if (method === "POST") next[ownerColumn] = uid;
+              if (method === "POST") next[ownerColumn] = rowOwner;
               else delete next[ownerColumn];
             }
             if (forceFilter && method === "POST") {
@@ -374,7 +387,7 @@ export function createDbGateway({
           const prefer = request.headers.get("prefer") ?? "";
           if (method === "POST" && ownerColumn && (prefer.toLowerCase().includes("resolution=") || params.has("on_conflict"))) {
             await assertOwnRows({
-              supabaseUrl, serviceKey, table: targetPath, ownerColumn, uid,
+              supabaseUrl, serviceKey, table: targetPath, ownerColumn, uid: rowOwner,
               target: params.get("on_conflict") || "id",
               rows: Array.isArray(parsed) ? parsed : [parsed],
             });
