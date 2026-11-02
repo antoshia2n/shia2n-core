@@ -12,6 +12,7 @@ export {
   insertOne, updateOne, deleteOne,
   upsertOne,
   dbGatewayEnabled, dbGatewayPath,
+  getWorkspace, setWorkspace,
 } from "./lib/supabase.js";
 
 // Design tokens & utils
