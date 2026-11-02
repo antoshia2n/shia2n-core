@@ -12,6 +12,11 @@
  *   ws_workspaces … id（ws_＋32 字）・name・created_at
  *   ws_members    … workspace_id・firebase_uid・role（owner / editor）・member_id・created_at
  *
+ * 気をつけること（2026-11-02 確認役のレビュー）
+ *   - 入っているかの答えは 30 秒覚える。抜けた人も最長 30 秒は開ける
+ *   - 関数（rpc）の持ち主の引数は場所の番号になる。人に付ける表（personal）を触る関数には使わない
+ *   - 場所に入っていても、アプリの入場（門番の権利）は別。場所を使うアプリは、今までどおり自分の門番を置く
+ *
  * 動作環境：Cloudflare Pages Functions / Workers
  */
 
@@ -77,13 +82,15 @@ export async function listWorkspaces({ env, uid, fetchImpl = fetch }) {
   const h = serviceHeaders(env);
   const res = await fetchImpl(`${baseUrl(env)}/rest/v1/ws_members?select=workspace_id,role&firebase_uid=eq.${encodeURIComponent(uid)}&limit=100`, { headers: h });
   if (!res.ok) throw new WorkspaceError(502, "場所の一覧を読めませんでした。");
-  const mem = await res.json();
+  const mem = await res.json().catch(() => null);
+  if (!Array.isArray(mem)) throw new WorkspaceError(502, "場所の一覧を読めませんでした。");
   if (!mem.length) return [];
   const ids = mem.map(m => m.workspace_id).filter(id => WORKSPACE_ID_RE.test(id));
   if (!ids.length) return [];
   const r2 = await fetchImpl(`${baseUrl(env)}/rest/v1/ws_workspaces?select=id,name&id=in.(${ids.join(",")})&order=name.asc`, { headers: h });
   if (!r2.ok) throw new WorkspaceError(502, "場所の一覧を読めませんでした。");
-  const ws = await r2.json();
+  const ws = await r2.json().catch(() => null);
+  if (!Array.isArray(ws)) throw new WorkspaceError(502, "場所の一覧を読めませんでした。");
   const role = new Map(mem.map(m => [m.workspace_id, m.role]));
   return ws.map(w => ({ id: w.id, name: w.name, role: role.get(w.id) ?? "editor" }));
 }

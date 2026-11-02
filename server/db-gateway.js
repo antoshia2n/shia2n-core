@@ -49,7 +49,7 @@ function jsonResponse(status, payload) {
 }
 
 function errorResponse(err) {
-  const status = err instanceof GatewayError || Number.isInteger(err?.status) ? err.status : 500;
+  const status = err instanceof GatewayError || (Number.isInteger(err?.status) && err.status >= 400 && err.status <= 599) ? err.status : 500;
   return jsonResponse(status, {
     message: err.message || "処理できませんでした",
     hint:    err.hint || "",
