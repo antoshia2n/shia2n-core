@@ -20,6 +20,8 @@ Naoki の全アプリで共有する中核モジュール。AuthGuard、Firebase
 
 ### 認証
 
+1.12.0（2026-11-03）：置き場の出入り口（server/storage-gateway.js）は、置くときの種類を拡張子で決め、中身の先頭が拡張子と合うかを確かめる。送られてきた Content-Type は使わない。既定で置けるのは png / jpg / jpeg / gif / webp だけ（avif を外した）。svg・html はアプリが許しても受けない（統括 2026-11-03）。アプリは次に組み立てたときから効く
+
 1.10.0（2026-10-31）：外枠を、Firebase を読まない本体 shell/shell-core.js と今までどおりの入口 shell/app-shell.js に分けた。自前の Firebase の初期化を持つアプリ・Firebase でログインしないアプリは shell-core.js を読み、cfg.source にログインの読み方を渡す（Firebase なら shell/firebase-source.js の firebaseSource(auth, db)）。あわせてアイコンを 8 つ足した（案件くん・お金を守るくん・個別相談管理・学ぶくん・ポータル・公式サイト・会員管理くん・FMオレ）
 
 1.9.0（2026-10-28）：右上のアプリ一覧を、会員（管理者ではない人）には門番 /gate/resolve の apps（権利の表 member_access）で出す。管理者の一覧（全アプリを使った順）と「会員の目で見る」は今までどおり

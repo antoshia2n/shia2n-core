@@ -6,7 +6,7 @@
  * 役割はこの5つだけ。判断はすべてこの1ファイルに集約する。
  *   1. ログイン済みの証明を毎回照合し、本人（uid）を確定する
  *   2. 置いてよい入れ物（バケット）だけを通す
- *   3. 置いてよい種類・大きさだけを通す
+ *   3. 置いてよい種類・大きさだけを通す（種類は拡張子で決め、中身の先頭が拡張子と合うかを確かめる。送られてきた Content-Type は使わない・2026-11-03）
  *   4. 保存先の名前をサーバー側で決める（画面が決めた名前は使わない＝既存ファイルを上書きさせない）
  *   5. 管理者キーを付けて置き場へ転送する
  *
@@ -21,7 +21,28 @@
 import { verifyIdToken } from "./db-gateway.js";
 
 /** 既定で置いてよい拡張子。画面の中で開かれるため、絵として安全なものだけにする。 */
-const DEFAULT_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "avif"];
+const DEFAULT_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp"];
+
+/** どのアプリでも受けない拡張子（画面の中で字を動かせるもの・2026-11-03 統括） */
+const NEVER_EXTENSIONS = ["svg", "svgz", "html", "htm", "xhtml", "xml", "js", "mjs"];
+
+/** 拡張子から決める種類。ここに無い拡張子（アプリが自分で足したもの）は、開かずに保存させる種類で置く */
+const TYPE_OF_EXT = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
+
+/** 中身の先頭が拡張子と合うか。合う形が分からない拡張子は、字の文書（< で始まる）でないことだけを見る */
+export function contentMatches(ext, bytes) {
+  const b = new Uint8Array(bytes.slice ? bytes.slice(0, 32) : bytes);
+  const at = (i, arr) => arr.every((v, k) => b[i + k] === v);
+  if (ext === "png") return at(0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  if (ext === "jpg" || ext === "jpeg") return at(0, [0xff, 0xd8, 0xff]);
+  if (ext === "gif") return at(0, [0x47, 0x49, 0x46, 0x38]);
+  if (ext === "webp") return at(0, [0x52, 0x49, 0x46, 0x46]) && at(8, [0x57, 0x45, 0x42, 0x50]);
+  // 分からない拡張子：先頭の空白と BOM を飛ばして < で始まるもの（SVG・HTML）は断る
+  let i = 0;
+  if (at(0, [0xef, 0xbb, 0xbf])) i = 3;
+  while (i < b.length && (b[i] === 0x20 || b[i] === 0x09 || b[i] === 0x0a || b[i] === 0x0d)) i++;
+  return b[i] !== 0x3c;
+}
 
 /** 既定の大きさの上限（50MB） */
 const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
@@ -54,11 +75,11 @@ function errorResponse(err) {
 }
 
 /** 元のファイル名から拡張子だけを取り出す。決められないときは断る。 */
-function extensionOf(name, allowed) {
+export function extensionOf(name, allowed) {
   const raw = String(name ?? "");
   const dot = raw.lastIndexOf(".");
   const ext = dot >= 0 ? raw.slice(dot + 1).toLowerCase() : "";
-  if (!ext || !/^[a-z0-9]{1,10}$/.test(ext) || !allowed.includes(ext)) {
+  if (!ext || !/^[a-z0-9]{1,10}$/.test(ext) || !allowed.includes(ext) || NEVER_EXTENSIONS.includes(ext)) {
     throw new StorageGatewayError(
       415,
       "この種類のファイルは置けません。",
@@ -126,13 +147,10 @@ export function createStorageGateway({ buckets = {}, allowUids = [] } = {}) {
       // ── 3. 置いてよい種類・大きさかを確かめる ──────────────────────────
       const ext = extensionOf(url.searchParams.get("name"), allowedExt);
 
-      const contentType = (request.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-      if (typePrefix && !contentType.startsWith(typePrefix)) {
-        throw new StorageGatewayError(
-          415,
-          "この種類のファイルは置けません。",
-          `受け付けるのは ${typePrefix}* です。`,
-        );
+      // 種類は拡張子で決める。送られてきた Content-Type は使わない（a.png の名前で SVG を送られても SVG として置かないため）
+      const contentType = TYPE_OF_EXT[ext] ?? "application/octet-stream";
+      if (TYPE_OF_EXT[ext] && typePrefix && !contentType.startsWith(typePrefix)) {
+        throw new StorageGatewayError(415, "この種類のファイルは置けません。", `受け付けるのは ${typePrefix}* です。`);
       }
 
       const bytes = await request.arrayBuffer();
@@ -145,6 +163,9 @@ export function createStorageGateway({ buckets = {}, allowUids = [] } = {}) {
           "ファイルが大きすぎます。",
           `上限は ${Math.floor(maxBytes / (1024 * 1024))}MB です。`,
         );
+      }
+      if (!contentMatches(ext, bytes)) {
+        throw new StorageGatewayError(415, "ファイルの名前と中身の種類が合いません。", `.${ext} の画像として開けるファイルを選んでください。`);
       }
 
       // ── 4. 保存先の名前をこちらで決める ────────────────────────────────
@@ -160,7 +181,7 @@ export function createStorageGateway({ buckets = {}, allowUids = [] } = {}) {
           headers: {
             apikey: serviceKey,
             ...(/^eyJ/.test(String(serviceKey || "")) ? { Authorization: `Bearer ${serviceKey}` } : {}),
-            "Content-Type": contentType || "application/octet-stream",
+            "Content-Type": contentType,
             "Cache-Control": "max-age=3600",
             "x-upsert": "false",
           },
