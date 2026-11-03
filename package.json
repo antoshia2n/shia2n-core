@@ -1,6 +1,6 @@
 {
   "name": "shia2n-core",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "description": "Shared modules for Naoki's app ecosystem (AuthGuard, firebase, supabase, db-gateway, storage-gateway, tokens, styles)",
   "main": "./index.js",
   "type": "module",
@@ -9,10 +9,14 @@
     "react-dom": "^18.0.0",
     "firebase": "^10.0.0 || ^11.0.0",
     "@supabase/supabase-js": "^2.0.0",
+    "@supabase/postgrest-js": ">=1.0.0",
     "lucide-react": ">=0.378.0"
   },
   "peerDependenciesMeta": {
     "lucide-react": {
+      "optional": true
+    },
+    "@supabase/postgrest-js": {
       "optional": true
     }
   }
