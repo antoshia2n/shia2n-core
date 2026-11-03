@@ -27,7 +27,8 @@ const DEFAULT_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp"];
 const NEVER_EXTENSIONS = ["svg", "svgz", "html", "htm", "xhtml", "xml", "js", "mjs"];
 
 /** 拡張子から決める種類。ここに無い拡張子（アプリが自分で足したもの）は、開かずに保存させる種類で置く */
-const TYPE_OF_EXT = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
+const TYPE_OF_EXT = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf" };
+// 2026-11-03 1.13.1：pdf を足した（スワイプくんが画像と PDF を置く。1.12.0 では開かずに保存させる種類で置かれてしまうため）
 
 /** 中身の先頭が拡張子と合うか。合う形が分からない拡張子は、字の文書（< で始まる）でないことだけを見る */
 export function contentMatches(ext, bytes) {
@@ -37,6 +38,7 @@ export function contentMatches(ext, bytes) {
   if (ext === "jpg" || ext === "jpeg") return at(0, [0xff, 0xd8, 0xff]);
   if (ext === "gif") return at(0, [0x47, 0x49, 0x46, 0x38]);
   if (ext === "webp") return at(0, [0x52, 0x49, 0x46, 0x46]) && at(8, [0x57, 0x45, 0x42, 0x50]);
+  if (ext === "pdf") return at(0, [0x25, 0x50, 0x44, 0x46, 0x2d]); // %PDF-
   // 分からない拡張子：先頭の空白と BOM を飛ばして < で始まるもの（SVG・HTML）は断る
   let i = 0;
   if (at(0, [0xef, 0xbb, 0xbf])) i = 3;
