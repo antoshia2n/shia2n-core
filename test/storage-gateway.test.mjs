@@ -22,8 +22,8 @@ test("a.png の名前で SVG の中身は断る（ほかの拡張子でも）", 
 });
 
 test("アプリが足した拡張子でも、< で始まる字の文書は断る", () => {
-  assert.equal(contentMatches("pdf", SVG), false);
-  assert.ok(contentMatches("pdf", new TextEncoder().encode("%PDF-1.7").buffer));
+  assert.equal(contentMatches("txt", SVG), false);
+  assert.ok(contentMatches("txt", new TextEncoder().encode("hello").buffer));
 });
 
 test("svg・html はどのアプリが許しても受けない／既定は png jpg jpeg gif webp だけ", () => {
@@ -31,4 +31,10 @@ test("svg・html はどのアプリが許しても受けない／既定は png j
   assert.throws(() => extensionOf("a.html", ["html"]), /置けません/);
   assert.throws(() => extensionOf("a.avif", ["jpg", "jpeg", "png", "gif", "webp"]), /置けません/);
   assert.equal(extensionOf("写真.PNG", ["jpg", "jpeg", "png", "gif", "webp"]), "png");
+});
+
+test("pdf は %PDF- で始まるものだけ（スワイプくん）", () => {
+  assert.ok(contentMatches("pdf", new TextEncoder().encode("%PDF-1.7\n").buffer));
+  assert.equal(contentMatches("pdf", SVG), false);
+  assert.equal(contentMatches("pdf", PNG), false);
 });

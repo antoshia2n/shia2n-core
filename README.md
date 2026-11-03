@@ -20,6 +20,8 @@ Naoki の全アプリで共有する中核モジュール。AuthGuard、Firebase
 
 ### 認証
 
+1.13.1（2026-11-03）：置き場の出入り口で pdf を application/pdf として置く（%PDF- で始まるものだけ）。1.12.0 では pdf が開かずに保存させる種類で置かれるところだった（スワイプくん）
+
 1.13.0（2026-11-03）：軽い入口 shia2n-core/lite.js を足した（統括 2026-11-03 便2）。名前は今までの入口と同じだが、supabase は表の読み書きだけ（@supabase/postgrest-js）、Firebase の db は firestore/lite（一度読む・書くだけ）。リアルタイムの読み込み（onSnapshot）や supabase.auth・storage を使うアプリは今までの入口のまま。今までの入口の中身は変えていない（表の出入り口の fetch は lib/gateway-fetch.js、CRUD は lib/crud.js、AuthGuard と外枠のログインの読み方は Firestore の関数を渡して作る形に切り出しただけ）。乗り換えた 1 本目は思考整理くん（最初に読む JS が約 297KB → 約 195KB）
 
 1.12.0（2026-11-03）：置き場の出入り口（server/storage-gateway.js）は、置くときの種類を拡張子で決め、中身の先頭が拡張子と合うかを確かめる。送られてきた Content-Type は使わない。既定で置けるのは png / jpg / jpeg / gif / webp だけ（avif を外した）。svg・html はアプリが許しても受けない（統括 2026-11-03）。アプリは次に組み立てたときから効く
