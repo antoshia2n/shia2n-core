@@ -191,6 +191,9 @@ function h(tag, attrs, ...kids) {
  *   onViewChange(isMember),                 // 「会員の目で見る」を切り替えたとき
  *   beforeSignOut(),                         // ログアウトの前に待つ（保存を出し切る）。false を返すとログアウトを止める（"cancel" なら知らせを出さずに止める）
  *   source,                                 // ログインの読み方（user・profile・apps・gateApps・signOut・watch）。Firebase は shell/firebase-source.js
+ *   portal,                                 // false なら、アプリ一覧の「ポータルを開く」を出さない（ポータルを閉じる生徒の画面・1.14.0）
+ *   self,                                   // false なら、アプリ一覧の「いま開いています」の行を出さない（生徒の画面・1.14.0）
+ *   account: [{label, icon?, run(anchor)}], // アカウントの窓の上に足す行（例：ご契約とお支払い・1.14.0）。icon は SVG の文字列
  * }
  */
 export function mountAppShell(cfg = {}) {
@@ -363,7 +366,7 @@ export function mountAppShell(cfg = {}) {
     p.append(h("div", { class: "ph" }, asMember() ? "開けるアプリ" : "全アプリ（最近開いた順）"));
     const curHost = here;
     const cur = h("div", { class: "it cur", "aria-current": "page" }, h("span", { class: "ai", html: iconSvg(curHost, 22) }), h("span", { class: "l" }, appName), h("span", { class: "r" }, "いま開いています"));
-    p.append(cur);
+    if (cfg.self !== false) p.append(cur);
     /* 会員（管理者ではない人）は、門番の答え（権利の表）で出す（2026-10-28）。ポータルの設定は読まない。
        管理者の「会員の目で見る」は今までどおりポータルの設定で出す（門番に「仮の会員」を聞けないため） */
     if (!isAdmin() && Array.isArray(gateApps)) {
@@ -372,8 +375,7 @@ export function mountAppShell(cfg = {}) {
       list.forEach(({ host, name }) => {
         p.append(h("a", { class: "it", href: "https://" + host, title: (APP_ICONS[host] || {}).name || name, onclick: () => touchRecent(host) }, h("span", { class: "ai", html: iconSvg(host, 22) }), h("span", { class: "l" }, (APP_ICONS[host] || {}).name || name)));
       });
-      p.append(h("div", { class: "sep" }));
-      p.append(h("a", { class: "it", href: PORTAL_URL, target: "_blank", rel: "noopener" }, h("span", { class: "i", html: SVG.out }), h("span", { class: "l" }, "ポータルを開く（教材とアプリの入口）")));
+      if (cfg.portal !== false) { p.append(h("div", { class: "sep" })); p.append(h("a", { class: "it", href: PORTAL_URL, target: "_blank", rel: "noopener" }, h("span", { class: "i", html: SVG.out }), h("span", { class: "l" }, "ポータルを開く（教材とアプリの入口）"))); }
       return;
     }
     if (appsErr && !p._retried) { p._retried = true; appsErr = null; apps = null; load(true).then(() => { if (open && open.trigger === bApps) { p.innerHTML = ""; appsBuild(p); if (open.place) open.place(); } }); }
@@ -405,8 +407,7 @@ export function mountAppShell(cfg = {}) {
         p.append(h("a", { class: "it", href: url, title: desc || name, onclick: () => touchRecent(host) }, h("span", { class: "ai", html: iconSvg(host, 22) }), h("span", { class: "l" }, name)));
       });
     }
-    p.append(h("div", { class: "sep" }));
-    p.append(h("a", { class: "it", href: PORTAL_URL, target: "_blank", rel: "noopener" }, h("span", { class: "i", html: SVG.out }), h("span", { class: "l" }, "ポータルを開く（教材とアプリの入口）")));
+    if (cfg.portal !== false) { p.append(h("div", { class: "sep" })); p.append(h("a", { class: "it", href: PORTAL_URL, target: "_blank", rel: "noopener" }, h("span", { class: "i", html: SVG.out }), h("span", { class: "l" }, "ポータルを開く（教材とアプリの入口）"))); }
     if (isAdmin() && memberView) p.append(h("div", { class: "pn" }, "会員の目で見ています（しあらぼ生・個別許可なし）。"));
   }
 
@@ -444,6 +445,8 @@ export function mountAppShell(cfg = {}) {
       p.append(sw, h("div", { class: "pn" }, "アプリ一覧とマニュアルが、しあらぼ生（個別許可なし）の見え方になります。管理者にだけ出ます。"));
     }
     p.append(h("div", { class: "sep" }));
+    /* アプリが足す行（ご契約など）。押したら窓を閉じてから動かす（1.14.0） */
+    (Array.isArray(cfg.account) ? cfg.account : []).forEach((a) => p.append(item(a.icon || "", a.label, "", () => { close("done"); setTimeout(() => a.run && a.run(bMe), 0); })));
     p.append(item(SVG.book, "使い方（マニュアル）", "", () => { close(); openManual("a", bMe); }));
     p.append(item(SVG.apps, "アプリ一覧", SVG.chev, () => drill((q) => { q.append(back(q)); appsBuild(q); })));
     /* 見た目の切り替えもアプリの設定も無いアプリでは、空の画面になるので出さない（1.10.0） */
