@@ -34,17 +34,12 @@ export { appListedFor };
 /** タブの名前。アプリ名は入れない（アプリはファビコンで示す・2026-10-26 Naoki OK） */
 export function setTabTitle(name, fallback) {
   const v = T(name);
-  document.title = chPrefix() + (v || T(fallback) || "");
+  document.title = v || T(fallback) || "";
 }
 
-/* シアニン用の版（クッキー lab_ch=next・server/channel.js）で開いているときだけ、タブの名前の頭に印を付ける */
-const CH_MARK = "【シアニン用】";
-function chPrefix() {
-  try { return /(?:^|;\s*)lab_ch=next(?:;|$)/.test(document.cookie) ? CH_MARK : ""; } catch { return ""; }
-}
-function markTitle() {
-  const p = chPrefix();
-  if (p && !document.title.startsWith(p)) document.title = p + document.title;
+/* シアニン用の版（クッキー lab_ch=next・server/channel.js）で開いているか。右上に小さな印を出す（タブの名前は変えない・2026-11-04 Naoki） */
+function isNextChannel() {
+  try { return /(?:^|;\s*)lab_ch=next(?:;|$)/.test(document.cookie); } catch { return false; }
 }
 
 
@@ -88,6 +83,7 @@ a{color:inherit}
 .ib:hover,.ib[aria-expanded="true"]{background:var(--soft,#f7f3ee);color:var(--fg,#1a1a1a)}
 .av{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;margin-left:4px;overflow:hidden;background:var(--ink,#1a1a1a);color:var(--on-ink,#fff);font-weight:700;font-size:13px;box-shadow:0 0 0 2px var(--panel,#fff),0 0 0 3px var(--line,#e6dfd6)}
 .av img{width:100%;height:100%;object-fit:cover;display:block}
+.ch{font-size:12px;font-weight:600;line-height:1;padding:4px 8px;margin-right:4px;border-radius:999px;color:var(--accent,#5e5ce6);border:1px solid currentColor;white-space:nowrap;user-select:none}
 .av.member{box-shadow:0 0 0 2px var(--panel,#fff),0 0 0 4px var(--accent,#f59e0b)}
 .pill{font-size:12px;font-weight:700;padding:4px 9px;border-radius:999px;background:var(--accent-bg,#fef3c7);color:var(--accent-ink,#b45309);margin-right:6px;white-space:nowrap}
 @media (max-width:640px){.wide{display:none}}
@@ -207,7 +203,6 @@ function h(tag, attrs, ...kids) {
  * }
  */
 export function mountAppShell(cfg = {}) {
-  markTitle();
   const src = { ...NOBODY, ...(cfg.source || {}) };
   const appId = T(cfg.appId) || "app";
   const appName = T(cfg.appName) || appId;
@@ -229,7 +224,8 @@ export function mountAppShell(cfg = {}) {
   const bHelp = h("button", { class: "ib wide", type: "button", "aria-label": "使い方（マニュアル）", title: "使い方（マニュアル）", "aria-haspopup": "dialog", "aria-expanded": "false", html: SVG.help });
   const bApps = h("button", { class: "ib wide", type: "button", "aria-label": "アプリ一覧", title: "アプリ一覧", "aria-haspopup": "dialog", "aria-expanded": "false", html: SVG.apps });
   const bMe = h("button", { class: "av", type: "button", "aria-label": "アカウント", "aria-haspopup": "dialog", "aria-expanded": "false" });
-  sr.append(h("div", { class: "bar" }, pill, bHelp, bApps, bMe));
+  const chMark = isNextChannel() ? h("span", { class: "ch", title: "シアニン用の最新版で開いています。生徒は生徒用の版を見ています" }, "最新版") : null;
+  sr.append(h("div", { class: "bar" }, ...(chMark ? [chMark] : []), pill, bHelp, bApps, bMe));
 
   /* ---- 浮かぶもの（body の直下・どの画面の重なりにも負けないように） ---- */
   const layerHost = h("div", { class: "s2-shell-layer" });
