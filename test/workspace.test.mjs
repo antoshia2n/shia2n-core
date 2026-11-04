@@ -85,6 +85,15 @@ test("出入り口：場所で開くと持ち主の列が場所の番号にな�
     // 2. 場所で読む：場所の番号で絞る
     await call("guest", { ws: WS });
     assert.equal(lastTo("xa_obs").url.searchParams.get("user_id"), `eq.${WS}`);
+    // 2b. 場所で読む：画面が本人の番号の条件を付けていても、その条件は外して場所の番号で絞る（コンテンツくん）
+    await call("guest", { ws: WS, path: "xa_obs?user_id=eq.guest&select=*" });
+    assert.deepEqual(lastTo("xa_obs").url.searchParams.getAll("user_id"), [`eq.${WS}`]);
+    // 2c. 見出しなし：画面の条件はそのまま（今の動きと同じ）
+    await call("naoki", { path: "xa_obs?user_id=eq.naoki" });
+    assert.deepEqual(lastTo("xa_obs").url.searchParams.getAll("user_id"), ["eq.naoki", "eq.naoki"]);
+    // 2d. 場所で読む：ほかの人の番号の条件は外さない（0 件のまま・広がらない）
+    await call("guest", { ws: WS, path: "xa_obs?user_id=eq.naoki" });
+    assert.deepEqual(lastTo("xa_obs").url.searchParams.getAll("user_id"), ["eq.naoki", `eq.${WS}`]);
     // 3. 場所で書く：画面が別の持ち主を送っても場所の番号で押す
     await call("guest", { ws: WS, method: "POST", body: JSON.stringify({ user_id: "naoki", note: "x" }) });
     assert.equal(JSON.parse(lastTo("xa_obs").init.body).user_id, WS);

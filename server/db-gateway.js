@@ -320,6 +320,14 @@ export function createDbGateway({
       }
 
       if (ownerColumn && method !== "POST") {
+        // 2026-11-04 場所：画面が自分で「本人の番号で絞る」条件（例 .eq("user_id", uid)）を付けているアプリがある（コンテンツくん）。
+        // 場所で開いているときは持ち主が場所の番号になるので、その条件だけ外す（残すと両方を満たす行が無く 0 件になる）。
+        // 下で出入り口の条件を必ず足すので、外しても場所の外の行には届かない。ほかの値の条件はそのまま残す
+        if (rowOwner !== uid && params.has(ownerColumn)) {
+          const kept = params.getAll(ownerColumn).filter(v => v !== `eq.${uid}`);
+          params.delete(ownerColumn);
+          for (const v of kept) params.append(ownerColumn, v);
+        }
         params.append(ownerColumn, `eq.${rowOwner}`);
       }
 
