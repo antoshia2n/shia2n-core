@@ -34,7 +34,17 @@ export { appListedFor };
 /** タブの名前。アプリ名は入れない（アプリはファビコンで示す・2026-10-26 Naoki OK） */
 export function setTabTitle(name, fallback) {
   const v = T(name);
-  document.title = v || T(fallback) || "";
+  document.title = chPrefix() + (v || T(fallback) || "");
+}
+
+/* シアニン用の版（クッキー lab_ch=next・server/channel.js）で開いているときだけ、タブの名前の頭に印を付ける */
+const CH_MARK = "【シアニン用】";
+function chPrefix() {
+  try { return /(?:^|;\s*)lab_ch=next(?:;|$)/.test(document.cookie) ? CH_MARK : ""; } catch { return ""; }
+}
+function markTitle() {
+  const p = chPrefix();
+  if (p && !document.title.startsWith(p)) document.title = p + document.title;
 }
 
 
@@ -197,6 +207,7 @@ function h(tag, attrs, ...kids) {
  * }
  */
 export function mountAppShell(cfg = {}) {
+  markTitle();
   const src = { ...NOBODY, ...(cfg.source || {}) };
   const appId = T(cfg.appId) || "app";
   const appName = T(cfg.appName) || appId;
