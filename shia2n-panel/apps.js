@@ -32,3 +32,15 @@ window.S2P_APPS = {
     { key: "members", name: "会員管理くん", url: "https://members.shia2n.jp/", open: "https://members.shia2n.jp/", color: "#725705", g: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><circle cx="8.6" cy="10.6" r="2"/><path d="M5.8 15.6c.5-1.4 1.6-2.2 2.8-2.2s2.3.8 2.8 2.2"/><path d="M13.5 10h4.5M13.5 13.5h3.5"/>' },
   ],
 };
+
+/**
+ * ゲスト版（2026-11-04・おかぜりさん・るりさんのゲスト招待）：ゲストの権利で開けるアプリだけを並べる。
+ * 正本は Supabase の member_access（entitlement_key＝guest の target）。target が増えたら、ここにも key を足す。
+ * 並べないアプリも、開けば各アプリの門番が断る（ここは見せ方だけ）。
+ */
+(() => {
+  const GUEST = ["swipe", "mindmap", "contents", "xkoryaku", "note"]; // swipe-file・mindmap・content-os・x-koryaku・note-koryaku
+  if (window.S2P_EDITION !== "guest") return;
+  const keep = (list) => list.filter((a) => GUEST.includes(a.key));
+  window.S2P_APPS = { panel: keep(window.S2P_APPS.panel), tab: keep(window.S2P_APPS.tab) };
+})();
