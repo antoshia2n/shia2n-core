@@ -2,6 +2,7 @@
  * シアニンのアプリのアイコン（形の正本：開発部のプロジェクト資料 claude/icon-rules.md と make_icons.py）。
  * ここは「アプリ一覧」でほかのアプリを見分けるための写し。地の色と絵は icon-rules.md の表と同じ値にする。
  * 2026-10-31：案件くん・お金を守るくん・個別相談管理・学ぶくん・ポータル・公式サイト・会員管理くん・FMオレを足した（Naoki「OK」12:34）。
+ * 2026-11-06：FMオレをオレtube に改名し、絵をラジオから再生の印に替えた（色はそのまま・Naoki OK 20:50）。
  * 住所（ホスト名）で引く。表に無いアプリは灰色の地だけ（文字は載せない決まり）。
  */
 export const APP_ICONS = {
@@ -24,7 +25,7 @@ export const APP_ICONS = {
   "portal.shia2n.jp":        { name: "ポータル",       color: "#286672", g: '<path d="M13 3.5h5a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5h-5"/><path d="M4 12h10M10.5 8.5 14 12l-3.5 3.5"/>' },
   "evolab.shia2n.jp":        { name: "公式サイト",     color: "#075f8c", g: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.4 2.6 3.5 5.4 3.5 8.5s-1.1 5.9-3.5 8.5c-2.4-2.6-3.5-5.4-3.5-8.5S9.6 6.1 12 3.5z"/>' },
   "members.shia2n.jp":       { name: "会員管理くん",   color: "#725705", g: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><circle cx="8.6" cy="10.6" r="2"/><path d="M5.8 15.6c.5-1.4 1.6-2.2 2.8-2.2s2.3.8 2.8 2.2"/><path d="M13.5 10h4.5M13.5 13.5h3.5"/>' },
-  "fm-ore.pages.dev":        { name: "FMオレ",         color: "#57534e", g: '<rect x="3.5" y="9" width="17" height="11.5" rx="2.2"/><path d="M7 9 17.5 3.5"/><circle cx="15.5" cy="14.75" r="2.6"/><path d="M6.8 13h4.2M6.8 16.5h4.2"/>' },
+  "fm-ore.pages.dev":        { name: "オレtube",       color: "#57534e", g: '<rect x="3.5" y="5.5" width="17" height="13" rx="3"/><path d="M10 9.2v5.6l4.8-2.8z"/>' },
 };
 
 const LEAF = "M44 0H114A14 14 0 0 1 128 14V84A44 44 0 0 1 84 128H14A14 14 0 0 1 0 114V44A44 44 0 0 1 44 0Z";
