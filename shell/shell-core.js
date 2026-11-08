@@ -22,7 +22,7 @@ import { APP_ICONS, hostOf, iconSvg } from "./icons.js";
 import { appListedFor } from "./app-access.js";
 import { ALL_APPS, readRecent, touchRecent, sortByRecent, memberAppItems } from "./all-apps.js";
 import { guideOn, setGuide, onGuide, ensureGuideCss } from "./guide.js";
-export { guideOn, setGuide, onGuide, guideBand, guidePin, showPin, ensureGuideCss, GUIDE_CSS } from "./guide.js";
+export { guideOn, setGuide, onGuide, guideHelp, ensureGuideCss, GUIDE_CSS } from "./guide.js";
 
 export const PORTAL_URL = "https://portal.shia2n.jp";
 /** 「会員の目で見る」で使う見え方：しあらぼ生（basic）・個別許可なし。生徒の大半がこの形（2026-10-26 実測） */
@@ -202,7 +202,7 @@ function h(tag, attrs, ...kids) {
  *   manual: { intro, sections:[{title, items:[{t, d, keys?:[], who?:'admin'}]}] },  // A できることの一覧
  *   keys:   [[まとまり, キー, すること], …],  // A の最後に出すキーボードの近道（アプリの一覧をそのまま渡す）
  *   tours:  [{id, title, desc, steps:[{el, title, body, before?}] , before?}],      // B 操作の案内
- *   guide:  true,   // 右上に「ガイド あり／なし」を出す（1.16.0）。帯と丸はアプリが shell/guide.js の guideBand・guidePin で出す
+ *   guide:  true,   // 右上に「ガイド あり／なし」を出す（1.16.0）。「？」はアプリが shell/guide.js の guideHelp で置く（1.17.0）
  *   settings: [{label, note, run(anchor)}],  // アプリ固有の設定（見た目は外枠が持つ）
  *   theme,                                  // false なら「見た目（自動・明るい・暗い）」を出さない（暗い画面を持たないアプリ・1.10.0）
  *   onViewChange(isMember),                 // 「会員の目で見る」を切り替えたとき
@@ -236,7 +236,7 @@ export function mountAppShell(cfg = {}) {
   const bApps = h("button", { class: "ib wide", type: "button", "aria-label": "アプリ一覧", title: "アプリ一覧", "aria-haspopup": "dialog", "aria-expanded": "false", html: SVG.apps });
   const bMe = h("button", { class: "av", type: "button", "aria-label": "アカウント", "aria-haspopup": "dialog", "aria-expanded": "false" });
   const chMark = isNextChannel() ? h("span", { class: "ch", title: "シアニン用の最新版で開いています。生徒は生徒用の版を見ています" }, "最新版") : null;
-  /* ガイドあり・なし（2026-11-08・1.16.0）：はじめて開いた人は「あり」。帯と丸は各アプリが shell/guide.js で出す */
+  /* ガイドあり・なし（2026-11-08・1.16.0）：はじめて開いた人は「あり」。「？」は各アプリが shell/guide.js で置く（1.17.0） */
   let bGuide = null;
   if (cfg.guide) {
     ensureGuideCss();
