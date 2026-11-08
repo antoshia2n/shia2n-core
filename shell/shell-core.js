@@ -21,6 +21,8 @@
 import { APP_ICONS, hostOf, iconSvg } from "./icons.js";
 import { appListedFor } from "./app-access.js";
 import { ALL_APPS, readRecent, touchRecent, sortByRecent, memberAppItems } from "./all-apps.js";
+import { guideOn, setGuide, onGuide, ensureGuideCss } from "./guide.js";
+export { guideOn, setGuide, onGuide, guideBand, guidePin, showPin, ensureGuideCss, GUIDE_CSS } from "./guide.js";
 
 export const PORTAL_URL = "https://portal.shia2n.jp";
 /** 「会員の目で見る」で使う見え方：しあらぼ生（basic）・個別許可なし。生徒の大半がこの形（2026-10-26 実測） */
@@ -87,6 +89,14 @@ a{color:inherit}
 .av.member{box-shadow:0 0 0 2px var(--panel,#fff),0 0 0 4px var(--accent,#f59e0b)}
 .pill{font-size:12px;font-weight:700;padding:4px 9px;border-radius:999px;background:var(--accent-bg,#fef3c7);color:var(--accent-ink,#b45309);margin-right:6px;white-space:nowrap}
 @media (max-width:640px){.wide{display:none}}
+/* ガイドあり・なし（1.16.0）。cfg.guide を渡したアプリだけに出す */
+.gsw{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 10px 0 11px;margin-right:4px;border-radius:999px;border:1px solid var(--line,#e6dfd6);background:var(--panel,#fff);font-size:12px;font-weight:700;color:var(--fg,#1a1a1a);white-space:nowrap}
+.gsw .tr{width:28px;height:16px;border-radius:8px;background:#a39a90;position:relative;transition:background .15s}
+.gsw .tr::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;transition:left .15s}
+.gsw[aria-checked="true"] .tr{background:#b45309}
+.gsw[aria-checked="true"] .tr::after{left:14px}
+.gsw .st{font-weight:600;color:var(--muted,#6b6259);min-width:2em;text-align:left}
+@media (max-width:640px){.gsw .lb{display:none}}
 
 .pop:focus,.drawer:focus,.bub:focus{outline:none}
 .pop{position:fixed;z-index:2147483000;min-width:280px;max-width:min(340px,calc(100vw - 16px));max-height:calc(100vh - 80px);overflow:auto;background:var(--panel,#fff);border:1px solid var(--line,#e6dfd6);border-radius:14px;box-shadow:var(--shadow,0 1px 2px rgba(60,40,20,.05),0 8px 24px rgba(60,40,20,.09));padding:6px}
@@ -192,6 +202,7 @@ function h(tag, attrs, ...kids) {
  *   manual: { intro, sections:[{title, items:[{t, d, keys?:[], who?:'admin'}]}] },  // A できることの一覧
  *   keys:   [[まとまり, キー, すること], …],  // A の最後に出すキーボードの近道（アプリの一覧をそのまま渡す）
  *   tours:  [{id, title, desc, steps:[{el, title, body, before?}] , before?}],      // B 操作の案内
+ *   guide:  true,   // 右上に「ガイド あり／なし」を出す（1.16.0）。帯と丸はアプリが shell/guide.js の guideBand・guidePin で出す
  *   settings: [{label, note, run(anchor)}],  // アプリ固有の設定（見た目は外枠が持つ）
  *   theme,                                  // false なら「見た目（自動・明るい・暗い）」を出さない（暗い画面を持たないアプリ・1.10.0）
  *   onViewChange(isMember),                 // 「会員の目で見る」を切り替えたとき
@@ -225,7 +236,17 @@ export function mountAppShell(cfg = {}) {
   const bApps = h("button", { class: "ib wide", type: "button", "aria-label": "アプリ一覧", title: "アプリ一覧", "aria-haspopup": "dialog", "aria-expanded": "false", html: SVG.apps });
   const bMe = h("button", { class: "av", type: "button", "aria-label": "アカウント", "aria-haspopup": "dialog", "aria-expanded": "false" });
   const chMark = isNextChannel() ? h("span", { class: "ch", title: "シアニン用の最新版で開いています。生徒は生徒用の版を見ています" }, "最新版") : null;
-  sr.append(h("div", { class: "bar" }, ...(chMark ? [chMark] : []), pill, bHelp, bApps, bMe));
+  /* ガイドあり・なし（2026-11-08・1.16.0）：はじめて開いた人は「あり」。帯と丸は各アプリが shell/guide.js で出す */
+  let bGuide = null;
+  if (cfg.guide) {
+    ensureGuideCss();
+    const st = h("span", { class: "st" });
+    bGuide = h("button", { class: "gsw", type: "button", role: "switch", title: "画面の上に、ここでできることを出す", onclick: () => setGuide(!guideOn()) },
+      h("span", { class: "lb" }, "ガイド"), h("span", { class: "tr", "aria-hidden": "true" }), st);
+    const paint = () => { const on = guideOn(); bGuide.setAttribute("aria-checked", on ? "true" : "false"); st.textContent = on ? "あり" : "なし"; };
+    paint(); onGuide(paint);
+  }
+  sr.append(h("div", { class: "bar" }, ...(chMark ? [chMark] : []), ...(bGuide ? [bGuide] : []), pill, bHelp, bApps, bMe));
 
   /* ---- 浮かぶもの（body の直下・どの画面の重なりにも負けないように） ---- */
   const layerHost = h("div", { class: "s2-shell-layer" });
