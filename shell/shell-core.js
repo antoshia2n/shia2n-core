@@ -401,9 +401,9 @@ export function mountAppShell(cfg = {}) {
       const list = sortByRecent(memberAppItems(gateApps, curHost), readRecent());
       if (!list.length) p.append(h("div", { class: "pn" }, "ほかに開けるアプリはありません。"));
       list.forEach(({ host, name }) => {
-        p.append(h("a", { class: "it", href: "https://" + host, title: (APP_ICONS[host] || {}).name || name, onclick: () => touchRecent(host) }, h("span", { class: "ai", html: iconSvg(host, 22) }), h("span", { class: "l" }, (APP_ICONS[host] || {}).name || name)));
+        p.append(h("a", { class: "it", href: "https://" + host, target: "_blank", rel: "noopener", title: ((APP_ICONS[host] || {}).name || name) + "（別タブで開く）", onclick: () => touchRecent(host) }, h("span", { class: "ai", html: iconSvg(host, 22) }), h("span", { class: "l" }, (APP_ICONS[host] || {}).name || name), h("span", { class: "r" }, "↗")));
       });
-      if (cfg.portal !== false) { p.append(h("div", { class: "sep" })); p.append(h("a", { class: "it", href: PORTAL_URL, target: "_blank", rel: "noopener" }, h("span", { class: "i", html: SVG.out }), h("span", { class: "l" }, "ポータルを開く（教材とアプリの入口）"))); }
+      if (cfg.portal !== false) { p.append(h("div", { class: "sep" })); p.append(h("a", { class: "it", href: PORTAL_URL, target: "_blank", rel: "noopener" }, h("span", { class: "i", html: SVG.out }), h("span", { class: "l" }, "ポータルを開く（教材とアプリの入口）"), h("span", { class: "r" }, "↗"))); }
       return;
     }
     if (appsErr && !p._retried) { p._retried = true; appsErr = null; apps = null; load(true).then(() => { if (open && open.trigger === bApps) { p.innerHTML = ""; appsBuild(p); if (open.place) open.place(); } }); }
@@ -432,10 +432,10 @@ export function mountAppShell(cfg = {}) {
       if (!list.length) p.append(h("div", { class: "pn" }, "ほかに開けるアプリはありません。"));
       list.forEach(({ host, url: u, desc, name }) => {
         let url = u; if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-        p.append(h("a", { class: "it", href: url, title: desc || name, onclick: () => touchRecent(host) }, h("span", { class: "ai", html: iconSvg(host, 22) }), h("span", { class: "l" }, name)));
+        p.append(h("a", { class: "it", href: url, target: "_blank", rel: "noopener", title: (desc || name) + "（別タブで開く）", onclick: () => touchRecent(host) }, h("span", { class: "ai", html: iconSvg(host, 22) }), h("span", { class: "l" }, name), h("span", { class: "r" }, "↗")));
       });
     }
-    if (cfg.portal !== false) { p.append(h("div", { class: "sep" })); p.append(h("a", { class: "it", href: PORTAL_URL, target: "_blank", rel: "noopener" }, h("span", { class: "i", html: SVG.out }), h("span", { class: "l" }, "ポータルを開く（教材とアプリの入口）"))); }
+    if (cfg.portal !== false) { p.append(h("div", { class: "sep" })); p.append(h("a", { class: "it", href: PORTAL_URL, target: "_blank", rel: "noopener" }, h("span", { class: "i", html: SVG.out }), h("span", { class: "l" }, "ポータルを開く（教材とアプリの入口）"), h("span", { class: "r" }, "↗"))); }
     if (isAdmin() && memberView) p.append(h("div", { class: "pn" }, "会員の目で見ています（しあらぼ生・個別許可なし）。"));
   }
 
