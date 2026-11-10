@@ -25,6 +25,7 @@ export const APP_ICONS = {
   "portal.shia2n.jp":        { name: "ポータル",       color: "#286672", g: '<path d="M13 3.5h5a1.5 1.5 0 0 1 1.5 1.5v14a1.5 1.5 0 0 1-1.5 1.5h-5"/><path d="M4 12h10M10.5 8.5 14 12l-3.5 3.5"/>' },
   "evolab.shia2n.jp":        { name: "公式サイト",     color: "#075f8c", g: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><path d="M12 3.5c2.4 2.6 3.5 5.4 3.5 8.5s-1.1 5.9-3.5 8.5c-2.4-2.6-3.5-5.4-3.5-8.5S9.6 6.1 12 3.5z"/>' },
   "members.shia2n.jp":       { name: "会員管理くん",   color: "#725705", g: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><circle cx="8.6" cy="10.6" r="2"/><path d="M5.8 15.6c.5-1.4 1.6-2.2 2.8-2.2s2.3.8 2.8 2.2"/><path d="M13.5 10h4.5M13.5 13.5h3.5"/>' },
+  "dokusho.shia2n.jp":       { name: "読書くん",       color: "#1a237e", g: '<path d="M4.5 4.5h3.5v15H4.5zM9.5 6.5h3.5v13H9.5z"/><path d="M14.6 7.6l3.4-.9 3.2 12.3-3.4.9z"/><path d="M3 19.8h18"/>' },
   "fm-ore.pages.dev":        { name: "オレtube",       color: "#57534e", g: '<rect x="3.5" y="5.5" width="17" height="13" rx="3"/><path d="M10 9.2v5.6l4.8-2.8z"/>' },
 };
 
