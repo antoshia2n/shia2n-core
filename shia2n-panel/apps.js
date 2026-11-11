@@ -1,6 +1,7 @@
 /**
  * 統合パネルに並べるアプリ（2026-10-31 開発部・Naoki「OK」12:34）。
  * panel：細い画面のあるアプリ（上の帯に並ぶ）。tab：細い画面の無いアプリ（押すとふつうの画面をそのままパネルの中に出す）。1.3.0 から上の帯には両方を使った順に並べる。
+ * 2026-11-11 1.8.0：読書くんを細い画面（/panel）で足した（Amazon の本のページなら読みたいへ・それ以外は本棚を探す）。
  * 2026-11-02 1.6.0：マーケくん・個別相談管理も細い画面（/panel）へ。
  * 2026-11-02 1.5.0：案件くん・売上管理・haAku に細い画面（/panel）ができたので tab から panel へ移した。
  * 2026-11-01 1.2.0：tab のアプリもパネルで開けるようにした（Naoki「AssetOS などがサイドパネルで呼び出せない」）。url はパネルに出す住所、open は別タブの住所。
@@ -21,6 +22,7 @@ window.S2P_APPS = {
     { key: "sales", name: "売上管理", url: "https://sales-manager.shia2n.jp/panel", open: "https://sales-manager.shia2n.jp/", color: "#ca8a04", g: '<circle cx="12" cy="12" r="8.5"/><path d="M8.8 7.2 12 11.5l3.2-4.3M12 11.5v6M9.2 12.8h5.6M9.2 15.5h5.6"/>' },
     { key: "marke", name: "マーケくん", url: "https://lab.shia2n.jp/panel", open: "https://lab.shia2n.jp/admin", color: "#c026d3", g: '<path d="M3.5 10v4a1 1 0 0 0 1 1H7l10 4.5v-15L7 9H4.5a1 1 0 0 0-1 1z"/><path d="M7.5 15l1.3 4.5h2.4l-1-3.6"/><path d="M20.5 10.2v3.6"/>' },
     { key: "consult", name: "個別相談管理", url: "https://consult-manager.shia2n.jp/panel", open: "https://consult-manager.shia2n.jp/", color: "#218fa5", g: '<path d="M3.5 6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H9.2L6 15.8V13h-.5a2 2 0 0 1-2-2z"/><path d="M18.5 9.2a2 2 0 0 1 2 2v4.3a2 2 0 0 1-2 2H18v2.6l-3.1-2.6H12a2 2 0 0 1-1.9-1.4"/>' },
+    { key: "dokusho", name: "読書くん", url: "https://dokusho.shia2n.jp/panel", open: "https://dokusho.shia2n.jp/", color: "#1a237e", g: '<path d="M4.5 4.5h3.5v15H4.5zM9.5 6.5h3.5v13H9.5z"/><path d="M14.6 7.6l3.4-.9 3.2 12.3-3.4.9z"/><path d="M3 19.8h18"/>' },
   ],
   tab: [
     { key: "note", name: "note攻略くん", url: "https://note-koryaku.shia2n.jp/", open: "https://note-koryaku.shia2n.jp/", color: "#9f1239", g: '<path d="M6 3.5h8.5L18 7v13.5H6z"/><path d="M14.5 3.5V7H18"/><path d="M12 18c-2.6-1.7-4.2-3.2-4.2-4.9a2.1 2.1 0 0 1 4.2-.5 2.1 2.1 0 0 1 4.2.5c0 1.7-1.6 3.2-4.2 4.9z"/>' },
