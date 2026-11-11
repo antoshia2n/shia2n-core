@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "シアニンパネル",
   "description": "シアニンのアプリを 1 つのサイドパネルで切り替えて使う。細い画面が無いアプリもパネルの中で開ける（新しいタブでも開ける）",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "minimum_chrome_version": "116",
   "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
   "action": { "default_title": "シアニンパネル", "default_icon": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png" } },
