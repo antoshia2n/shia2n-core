@@ -35,6 +35,7 @@ export const ALL_APPS = Object.freeze([
   { host: "fm-ore.pages.dev",          name: "オレtube" },
   { host: "dokusho.shia2n.jp",         name: "読書くん" },
   { host: "brain.shia2n.jp",           name: "ブレインくん" },
+  { host: "manager.shia2n.jp",         name: "マネージャーくん" },
 ]);
 
 export const RECENT_COOKIE = "s2recent";
