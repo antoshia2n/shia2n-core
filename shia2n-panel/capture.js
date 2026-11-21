@@ -7,6 +7,8 @@
  * 読み方は bridge-anken.js の readChat と同じ印を使う（ページの形が変わったら両方を直す）。
  * 1.10.1（2026-11-21）：ChatGPT の画面の作りが変わった（往復ごとの箱 data-turn-key・発言 data-user-message-bubble・返事 data-response-body）。
  *   箱の番号（data-turn-key）を一緒に送り、マネージャーくんが前に受けた分と足し合わせる（ChatGPT は画面に出ている往復しか描かないため）。
+ * 1.11.0（2026-11-22 4便目）：チャットが入っているプロジェクトの名前も送る（マネージャーくんの分野の棚になる）。
+ *   Claude は上部のプロジェクトへのリンク（/project/…）、ChatGPT は上部の「プロジェクト: ○○」の印。プロジェクトの外なら送らない。
  */
 (() => {
   const QUIET_MS = 5000;
@@ -54,6 +56,21 @@
     return turns.filter((t) => t.user || t.reply);
   }
 
+  function project() {
+    if (service === "claude") {
+      // 左の一覧（最近のチャット・プロジェクトへのリンクが並ぶ枠）にあるものは除く。上部のパンくずの枠は除かない
+      const inSide = (el) => { const n = el.closest("nav, aside"); return !!(n && n.querySelector('a[href^="/chat/"], a[href="/projects"]')); };
+      const a = [...document.querySelectorAll('a[href^="/project/"]')].find((el) => !inSide(el));
+      return a ? tidy(a.textContent).slice(0, 60) : "";
+    }
+    if (!/\/g\/g-p-/.test(location.pathname)) return "";
+    for (const el of document.querySelectorAll("header [aria-label], header [title]")) {
+      const m = String(el.getAttribute("aria-label") || el.getAttribute("title") || "").match(/^(?:プロジェクト|Project)\s*[:：]\s*(.+)$/);
+      if (m) return m[1].trim().slice(0, 60);
+    }
+    return "";
+  }
+
   function sig(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return s.length + ":" + (h >>> 0); }
 
   async function tick() {
@@ -66,11 +83,12 @@
     if (!has) return;
     const turns = read();
     if (!turns.length || !turns.some((t) => t.reply)) return;
-    const s = sig(url + "\n" + JSON.stringify(turns));
+    const proj = project();
+    const s = sig(url + "\n" + proj + "\n" + JSON.stringify(turns));
     if (url === lastUrl && s === lastSig) return;
     const title = document.title.replace(/\s*[-|]\s*(ChatGPT|Claude)\s*$/, "").trim();
     try {
-      const r = await chrome.runtime.sendMessage({ type: "mk-capture", payload: { url, title, turns } });
+      const r = await chrome.runtime.sendMessage({ type: "mk-capture", payload: { url, title, turns, ...(proj ? { project: proj } : {}) } });
       if (r && r.ok) { lastUrl = url; lastSig = s; }
     } catch { /* 背景が眠っていれば次の変化でまた送る */ }
   }
