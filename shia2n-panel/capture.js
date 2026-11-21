@@ -5,6 +5,8 @@
  *   ・前に送った中身と同じなら送らない。違えば背景（background.js）に渡し、背景がマネージャーくんへ送る
  *   ・ChatGPT のキャンバスと Claude のアーティファクトの中身は読まない（別の画面で開くもの）
  * 読み方は bridge-anken.js の readChat と同じ印を使う（ページの形が変わったら両方を直す）。
+ * 1.10.1（2026-11-21）：ChatGPT の画面の作りが変わった（往復ごとの箱 data-turn-key・発言 data-user-message-bubble・返事 data-response-body）。
+ *   箱の番号（data-turn-key）を一緒に送り、マネージャーくんが前に受けた分と足し合わせる（ChatGPT は画面に出ている往復しか描かないため）。
  */
 (() => {
   const QUIET_MS = 5000;
@@ -17,12 +19,21 @@
 
   function busy() {
     // 書いている途中（止めるボタンが出ている間）は読まない
-    return !!document.querySelector('[data-testid="stop-button"], button[aria-label="Stop response"], button[aria-label="応答を停止"], button[aria-label="Stop generating"]');
+    if (document.querySelector('[data-testid="stop-button"], button[aria-label="Stop response"], button[aria-label="応答を停止"], button[aria-label="Stop generating"]')) return true;
+    return [...document.querySelectorAll("[data-talvt-turn-state]")].some((el) => /stream|generat|pending|progress|running/i.test(el.getAttribute("data-talvt-turn-state") || ""));
   }
 
   function read() {
     const turns = [];
-    if (service === "chatgpt") {
+    const boxes = service === "chatgpt" ? [...document.querySelectorAll("main [data-turn-key]")] : [];
+    if (boxes.length) {
+      // 2026-11 からの ChatGPT：1 つの箱に発言と返事（返事は道具を使うと複数の塊になる）
+      for (const b of boxes) {
+        const u = b.querySelector("[data-user-message-bubble]");
+        const rs = [...b.querySelectorAll("[data-response-body]")].filter((el, _, all) => !all.some((o) => o !== el && o.contains(el)));
+        turns.push({ k: b.getAttribute("data-turn-key") || undefined, user: tidy(u && u.innerText), reply: tidy(rs.map((r) => r.innerText).join("\n\n")) });
+      }
+    } else if (service === "chatgpt") {
       for (const el of document.querySelectorAll("[data-message-author-role]")) {
         const role = el.getAttribute("data-message-author-role");
         const text = tidy(el.innerText);
