@@ -21,6 +21,9 @@
  * 1.15.1（2026-11-22）：ウィンドウを何枚も開いているとき
  *   作業のまとまりがほかのウィンドウで開いていれば、そのウィンドウを前に出してそこで動かす（同じタブを二重に開かない）
  *   チャットのタブがほかのウィンドウにあれば、新しく開かずにそのタブをまとまりへ移す
+ * 1.16.0（2026-11-22）：1 つのパネルで全部のウィンドウを扱う
+ *   tabs-list はウィンドウごとに返す（画面の左からの位置で 左・真ん中・右。このパネルのウィンドウに印）
+ *   group-here：そのまとまりを、このパネルのウィンドウへまとめて移す
  */
 (() => {
   const ORIGINS = ["https://manager.shia2n.jp", "https://shia2n-mcp.gameister1.workers.dev"];
@@ -123,16 +126,24 @@
   }
   chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.type === "mk-changed") post({ type: "refresh" }); });
 
-  // 1.14.0：このウィンドウのまとまりと、どこにも入っていないタブ
+  // 1.16.0：全部のウィンドウのまとまりと、どこにも入っていないタブ（ウィンドウごと・左から順）
   async function tabsList() {
-    const w = await win();
-    const [gs, ts] = await Promise.all([chrome.tabGroups.query({ windowId: w.id }), chrome.tabs.query({ windowId: w.id })]);
-    const first = new Map();
-    for (const t of ts) if (t.groupId !== -1 && !first.has(t.groupId)) first.set(t.groupId, t.index);
-    const groups = gs.map((g) => ({ id: g.id, title: g.title || "", color: g.color, collapsed: g.collapsed, count: ts.filter((t) => t.groupId === g.id).length }))
-      .sort((a, b) => (first.get(a.id) ?? 0) - (first.get(b.id) ?? 0));
-    const loose = ts.filter((t) => t.groupId === -1 && !t.pinned && /^https?:\/\//.test(t.url || "")).map((t) => ({ id: t.id, title: (t.title || "").slice(0, 120), url: t.url }));
-    post({ type: "tabs-list", groups, loose });
+    const me = await win();
+    const wins = (await chrome.windows.getAll({ windowTypes: ["normal"] })).sort((a, b) => (a.left ?? 0) - (b.left ?? 0) || a.id - b.id);
+    const names = wins.length === 3 ? ["左の画面", "真ん中の画面", "右の画面"] : wins.length === 2 ? ["左の画面", "右の画面"] : wins.map((_, i) => wins.length === 1 ? "" : `ウィンドウ ${i + 1}`);
+    const out = [];
+    for (const [i, w] of wins.entries()) {
+      const [gs, ts] = await Promise.all([chrome.tabGroups.query({ windowId: w.id }), chrome.tabs.query({ windowId: w.id })]);
+      const first = new Map();
+      for (const t of ts) if (t.groupId !== -1 && !first.has(t.groupId)) first.set(t.groupId, t.index);
+      const groups = gs.map((g) => ({ id: g.id, title: g.title || "", color: g.color, collapsed: g.collapsed, count: ts.filter((t) => t.groupId === g.id).length }))
+        .sort((a, b) => (first.get(a.id) ?? 0) - (first.get(b.id) ?? 0));
+      const loose = ts.filter((t) => t.groupId === -1 && !t.pinned && /^https?:\/\//.test(t.url || "")).slice(0, 40).map((t) => ({ id: t.id, title: (t.title || "").slice(0, 120), url: t.url }));
+      out.push({ id: w.id, name: names[i], here: w.id === me.id, groups, loose });
+    }
+    // 前の形（1 つのウィンドウ）も添える：このパネルのウィンドウ
+    const mine = out.find((x) => x.here) || out[0] || { groups: [], loose: [] };
+    post({ type: "tabs-list", windows: out, groups: mine.groups, loose: mine.loose });
   }
   let listT = null;
   const listSoon = () => { clearTimeout(listT); listT = setTimeout(() => tabsList().catch(() => {}), 400); };
@@ -140,6 +151,7 @@
     const g = await chrome.tabGroups.get(id);
     if (type === "group-expand") { await chrome.tabGroups.update(id, { collapsed: false }); const [t] = await chrome.tabs.query({ groupId: id }); if (t) await chrome.tabs.update(t.id, { active: true }); return; }
     if (type === "group-collapse") return void await chrome.tabGroups.update(id, { collapsed: true });
+    if (type === "group-here") { const w = await win(); await chrome.tabGroups.move(id, { windowId: w.id, index: -1 }); await chrome.tabGroups.update(id, { collapsed: false }).catch(() => {}); return done(true, `「${g.title || "まとまり"}」をこの画面へ移しました`); }
     if (g.title) await saveGroup(id);
     const ts = await chrome.tabs.query({ groupId: id });
     if (ts.length) await chrome.tabs.remove(ts.map((t) => t.id));
@@ -157,7 +169,7 @@
     const want = new Map((Array.isArray(items) ? items : []).filter((x) => x && COLORS.includes(x.color)).map((x) => [key(x.name), x.color]));
     for (const g of await chrome.tabGroups.query({})) { const c = want.get(key(g.title)); if (c && g.color !== c) await chrome.tabGroups.update(g.id, { color: c }); }
   }
-  for (const ev of [chrome.tabs.onCreated, chrome.tabs.onRemoved, chrome.tabs.onUpdated, chrome.tabs.onMoved, chrome.tabs.onAttached, chrome.tabs.onDetached, chrome.tabGroups.onCreated, chrome.tabGroups.onUpdated, chrome.tabGroups.onRemoved]) ev.addListener(listSoon);
+  for (const ev of [chrome.windows.onCreated, chrome.windows.onRemoved, chrome.windows.onBoundsChanged, chrome.tabs.onCreated, chrome.tabs.onRemoved, chrome.tabs.onUpdated, chrome.tabs.onMoved, chrome.tabs.onAttached, chrome.tabs.onDetached, chrome.tabGroups.onCreated, chrome.tabGroups.onUpdated, chrome.tabGroups.onRemoved]) ev.addListener(listSoon);
 
   addEventListener("message", async (e) => {
     const f = frame();
@@ -181,7 +193,7 @@
       try { if (m.type === "do-work") await doWork(m.name, m.urls, m.color, m.focus); else await tabGo(m.url); }
       catch (err) { done(false, "タブを動かせませんでした：" + String(err && err.message || err).slice(0, 120)); }
       return;
-    } else if (["tabs-list", "group-expand", "group-collapse", "group-close", "tab-focus", "tab-close", "tab-move", "tabs-paint"].includes(m.type)) {
+    } else if (["tabs-list", "group-expand", "group-collapse", "group-close", "group-here", "tab-focus", "tab-close", "tab-move", "tabs-paint"].includes(m.type)) {
       try {
         if (m.type === "tabs-list") await tabsList();
         else if (m.type === "tabs-paint") await paint(m.items);
