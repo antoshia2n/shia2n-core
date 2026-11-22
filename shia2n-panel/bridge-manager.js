@@ -69,6 +69,15 @@
       await chrome.storage.local.set({ mk_key: m.key, mk_base: m.base, mk_last: null });
     } else if (m.type === "ext-forget") {
       await chrome.storage.local.remove(["mk_key", "mk_base", "mk_last"]);
+    } else if (m.type === "tab-current") {
+      // 1.13.0：今のタブ（いちばん前のウィンドウの、選んでいるタブ）の住所と題を返す。チャットの住所のときだけ
+      try {
+        const w = await win();
+        const [t] = await chrome.tabs.query({ active: true, windowId: w.id });
+        if (t && CHAT_URL.test(t.url || "")) post({ type: "tab-current", ok: true, url: t.url, title: t.title || "" });
+        else post({ type: "tab-current", ok: false, message: "今のタブは Claude か ChatGPT のチャットではありません" });
+      } catch (err) { post({ type: "tab-current", ok: false, message: "今のタブを読めませんでした" }); }
+      return;
     } else if (m.type === "tabs-open" || m.type === "tabs-collapse" || m.type === "tabs-close") {
       try {
         if (m.type === "tabs-open") await tabsOpen(m.name, m.urls);
