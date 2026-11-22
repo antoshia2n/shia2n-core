@@ -142,3 +142,45 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   saveGroup(Number(msg.groupId), true).then(sendResponse);
   return true;
 });
+
+/* 1.15.0（2026-11-22 マネージャーくん 8便目）：通知・アイコンの数・読み取りの入れ直し
+ *   ・mk-done-unseen：見ていない間に AI が書き終わった → Chrome の通知（押すとそのタブ）とアイコンの数
+ *   ・mk-seen-local：そのタブを見た → 数から外す・通知を消す
+ *   ・拡張を入れ替えた・入れたとき、開いている Claude と ChatGPT のタブへ読み取り（capture.js）を入れ直す
+ *   ・台帳が変わりそうなとき（全文・合図・まとまりを送った）、パネルへ「読み直して」を送る */
+const MK_UNSEEN = "mk_unseen";
+async function unseen() { try { return (await chrome.storage.session.get(MK_UNSEEN))[MK_UNSEEN] || []; } catch { return []; } }
+async function setUnseen(list) {
+  try { await chrome.storage.session.set({ [MK_UNSEEN]: list }); } catch {}
+  await chrome.action.setBadgeBackgroundColor({ color: "#ae5a5a" }).catch(() => {});
+  await chrome.action.setBadgeText({ text: list.length ? String(list.length) : "" }).catch(() => {});
+}
+function mkChanged() { chrome.runtime.sendMessage({ type: "mk-changed" }).catch(() => {}); }
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!msg || !sender || !sender.tab) return;
+  const tabId = sender.tab.id;
+  if (msg.type === "mk-done-unseen") {
+    (async () => {
+      const list = await unseen();
+      if (!list.includes(tabId)) await setUnseen([...list, tabId]);
+      chrome.notifications.create("mk-tab-" + tabId, { type: "basic", iconUrl: "icons/128.png", title: "返事が来ました", message: String(msg.title || "チャット").slice(0, 120), priority: 1 });
+      mkChanged();
+    })();
+  } else if (msg.type === "mk-seen-local") {
+    (async () => { const list = await unseen(); if (list.includes(tabId)) await setUnseen(list.filter((x) => x !== tabId)); chrome.notifications.clear("mk-tab-" + tabId); })();
+  } else if (msg.type === "mk-capture" || msg.type === "mk-turn") {
+    setTimeout(mkChanged, 1500);
+  }
+});
+chrome.notifications.onClicked.addListener(async (id) => {
+  const m = /^mk-tab-(\d+)$/.exec(id); if (!m) return;
+  try { const t = await chrome.tabs.update(Number(m[1]), { active: true }); await chrome.windows.update(t.windowId, { focused: true }); } catch {}
+  chrome.notifications.clear(id);
+});
+chrome.tabs.onRemoved.addListener(async (tabId) => { const list = await unseen(); if (list.includes(tabId)) await setUnseen(list.filter((x) => x !== tabId)); });
+chrome.runtime.onInstalled.addListener(async () => {
+  try {
+    const tabs = await chrome.tabs.query({ url: ["https://claude.ai/*", "https://chatgpt.com/*", "https://chat.openai.com/*"] });
+    for (const t of tabs) chrome.scripting.executeScript({ target: { tabId: t.id }, files: ["capture.js"] }).catch(() => {});
+  } catch {}
+});

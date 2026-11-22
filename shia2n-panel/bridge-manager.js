@@ -14,6 +14,10 @@
  *   tabs-close・group-close：閉じる前に、まとまりの中身を作業へ写す（background.js の mk-save-group）
  *   tabs-list：このウィンドウのまとまりと、どこにも入っていないタブを画面へ返す（変わるたびに送り直す）
  *   group-expand・group-collapse・tab-focus・tab-close・tab-move（作業の名前のまとまりへ入れる）・tabs-paint（作業の色で塗る）
+ * 1.15.0（2026-11-22 8便目）：「今」の画面から
+ *   do-work：その作業のまとまりを開いて前に出し（無ければ保存したタブとチャットで開く）、focus のチャットのタブを選ぶ。ほかのまとまりはたたむ
+ *   tab-go：そのチャットのタブへ飛ぶ（どのウィンドウでも。無ければ新しいタブで開く）
+ *   背景から「台帳が変わった」（mk-changed）が来たら、画面へ refresh を送る
  */
 (() => {
   const ORIGINS = ["https://manager.shia2n.jp", "https://shia2n-mcp.gameister1.workers.dev"];
@@ -69,6 +73,41 @@
     done(true, `タブを ${n} 本保存して閉じました。作業の「タブで開く」で戻せます`);
   }
 
+  // 1.15.0：作業をやる・チャットのタブへ飛ぶ
+  const same = (a, b) => CHAT_URL.test(a || "") && CHAT_URL.test(b || "") ? chatId(a) === chatId(b) : String(a || "").split("#")[0] === String(b || "").split("#")[0];
+  async function doWork(name, urls, color, focus) {
+    const title = String(name || "").slice(0, 40);
+    const w = await win();
+    let g = (await groupsNamed(title, w.id))[0];
+    if (!g) {
+      await tabsOpen(title, urls, color);
+      g = (await groupsNamed(title, w.id))[0];
+      if (!g) return;
+    } else {
+      // 開いているまとまりに、まだ無いチャットだけ足す
+      const have = await chrome.tabs.query({ groupId: g.id });
+      const add = [];
+      for (const u of (Array.isArray(urls) ? urls : []).map(String).filter((u) => CHAT_URL.test(u)).slice(0, 20)) if (!have.some((t) => same(t.url, u))) add.push((await chrome.tabs.create({ url: u, active: false, windowId: w.id })).id);
+      if (add.length) await chrome.tabs.group({ tabIds: add, groupId: g.id });
+      await chrome.tabGroups.update(g.id, { collapsed: false });
+    }
+    for (const o of await chrome.tabGroups.query({ windowId: w.id })) if (o.id !== g.id && !o.collapsed) await chrome.tabGroups.update(o.id, { collapsed: true }).catch(() => {});
+    const inG = (await chrome.tabs.query({ groupId: g.id })).sort((a, b) => a.index - b.index);
+    const pick = (focus && inG.find((t) => same(t.url, focus))) || inG[0];
+    if (pick) await chrome.tabs.update(pick.id, { active: true });
+    done(true, `「${title}」を前に出しました`);
+  }
+  async function tabGo(url) {
+    const u = String(url || "");
+    if (!/^https?:\/\//.test(u)) return done(false, "住所がありません");
+    const hit = (await chrome.tabs.query({})).find((t) => same(t.url, u));
+    if (hit) {
+      if (hit.groupId !== -1) await chrome.tabGroups.update(hit.groupId, { collapsed: false }).catch(() => {});
+      await chrome.tabs.update(hit.id, { active: true }); await chrome.windows.update(hit.windowId, { focused: true });
+    } else { const w = await win(); await chrome.tabs.create({ url: u, active: true, windowId: w.id }); }
+  }
+  chrome.runtime.onMessage.addListener((msg) => { if (msg && msg.type === "mk-changed") post({ type: "refresh" }); });
+
   // 1.14.0：このウィンドウのまとまりと、どこにも入っていないタブ
   async function tabsList() {
     const w = await win();
@@ -122,6 +161,10 @@
         if (t && CHAT_URL.test(t.url || "")) post({ type: "tab-current", ok: true, url: t.url, title: t.title || "" });
         else post({ type: "tab-current", ok: false, message: "今のタブは Claude か ChatGPT のチャットではありません" });
       } catch (err) { post({ type: "tab-current", ok: false, message: "今のタブを読めませんでした" }); }
+      return;
+    } else if (m.type === "do-work" || m.type === "tab-go") {
+      try { if (m.type === "do-work") await doWork(m.name, m.urls, m.color, m.focus); else await tabGo(m.url); }
+      catch (err) { done(false, "タブを動かせませんでした：" + String(err && err.message || err).slice(0, 120)); }
       return;
     } else if (["tabs-list", "group-expand", "group-collapse", "group-close", "tab-focus", "tab-close", "tab-move", "tabs-paint"].includes(m.type)) {
       try {
