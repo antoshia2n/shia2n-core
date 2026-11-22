@@ -12,6 +12,7 @@
  * 1.14.0（2026-11-22 7便目）：タブ管理
  *   tabs-open：保存したタブ（チャット以外も・http(s) だけ・40 本まで）も開く。まとまりの色は作業の状態の色
  *   tabs-close・group-close：閉じる前に、まとまりの中身を作業へ写す（background.js の mk-save-group）
+ *   tabs-shimau（1.18.0）：全部しまう。名前のあるまとまりは作業へ、ほかは「受け箱」へ写してから閉じる。どのウィンドウにも空のタブを 1 つ残す
  *   tabs-list：このウィンドウのまとまりと、どこにも入っていないタブを画面へ返す（変わるたびに送り直す）
  *   group-expand・group-collapse・tab-focus・tab-close・tab-move（作業の名前のまとまりへ入れる）・tabs-paint（作業の色で塗る）
  * 1.15.0（2026-11-22 8便目）：「今」の画面から
@@ -186,6 +187,43 @@
     else { const gid = await chrome.tabs.group({ tabIds: [id], createProperties: { windowId: tab.windowId } }); await chrome.tabGroups.update(gid, { title, color: "green" }); }
     done(true, `「${title}」に入れました`);
   }
+  /* 1.18.0（マネージャーくん v1.146.0）：全部しまう
+   *   ・名前のあるまとまり → 作業へ写してから閉じる（写せなかったら閉じずに止まる）
+   *   ・名前のないまとまりと、まとまりに入っていないページ → 「受け箱」へ足してから閉じる
+   *   ・ピン留め・マネージャーのページ・ページでないタブ（新しいタブなど）は残す。どのウィンドウにも空のタブを 1 つ残す（ウィンドウを消さない） */
+  async function shimau() {
+    const SKIP = (t) => t.pinned || !/^https?:\/\//.test(t.url || t.pendingUrl || "") || /^https:\/\/manager\.shia2n\.jp(\/|$)/.test(t.url || "");
+    let groups = 0, inbox = 0, closed = 0;
+    const wins = await chrome.windows.getAll({ windowTypes: ["normal"] });
+    const loose = [], close = [];
+    for (const w of wins) {
+      const ts = await chrome.tabs.query({ windowId: w.id });
+      for (const g of await chrome.tabGroups.query({ windowId: w.id })) {
+        const in_ = ts.filter((t) => t.groupId === g.id && !SKIP(t));
+        if (!in_.length) continue;
+        if (g.title) {
+          const r = await saveGroup(g.id);
+          if (!r || !r.ok) return done(false, `「${g.title}」を保存できなかったので、そこで止めました（閉じたのは ${closed} 本）`);
+          groups++;
+          close.push(...in_.map((t) => t.id));
+        } else in_.forEach((t) => loose.push(t));
+      }
+      ts.filter((t) => t.groupId === -1 && !SKIP(t)).forEach((t) => loose.push(t));
+    }
+    if (loose.length) {
+      const r = await chrome.runtime.sendMessage({ type: "mk-save-tabs", group: "受け箱", tabs: loose.map((t) => ({ url: t.url || t.pendingUrl, title: (t.title || "").slice(0, 200) })) }).catch(() => null);
+      if (!r || !r.ok) return done(false, `受け箱へ保存できなかったので、まとまりに入っていない ${loose.length} 本は閉じずに残しました`);
+      inbox = loose.length; close.push(...loose.map((t) => t.id));
+    }
+    // 空のタブを 1 つ残す（閉じたあとに残るタブが無いウィンドウだけ）
+    for (const w of wins) {
+      const left = (await chrome.tabs.query({ windowId: w.id })).filter((t) => !close.includes(t.id));
+      if (!left.length) await chrome.tabs.create({ windowId: w.id, active: true });
+    }
+    if (close.length) await chrome.tabs.remove(close);
+    closed = close.length;
+    done(true, `しまいました：作業 ${groups} つ・受け箱 ${inbox} 本・閉じたタブ ${closed} 本`);
+  }
   async function paint(items) {
     const want = new Map((Array.isArray(items) ? items : []).filter((x) => x && COLORS.includes(x.color)).map((x) => [key(x.name), x.color]));
     for (const g of await chrome.tabGroups.query({})) { const c = want.get(key(g.title)); if (c && g.color !== c) await chrome.tabGroups.update(g.id, { color: c }); }
@@ -214,7 +252,7 @@
       try { if (m.type === "do-work") await doWork(m.name, m.urls, m.color, m.focus); else await tabGo(m.url); }
       catch (err) { done(false, "タブを動かせませんでした：" + String(err && err.message || err).slice(0, 120)); }
       return;
-    } else if (["tabs-list", "group-new", "tab-move-active", "group-expand", "group-collapse", "group-close", "group-here", "tab-focus", "tab-close", "tab-move", "tabs-paint"].includes(m.type)) {
+    } else if (["tabs-list", "group-new", "tab-move-active", "group-expand", "group-collapse", "group-close", "group-here", "tab-focus", "tab-close", "tab-move", "tabs-paint", "tabs-shimau"].includes(m.type)) {
       try {
         if (m.type === "tabs-list") await tabsList();
         else if (m.type === "group-new") await groupNew(m.name, m.color);
@@ -223,6 +261,7 @@
         else if (m.type === "tab-focus") { const t = await chrome.tabs.update(Number(m.id), { active: true }); await chrome.windows.update(t.windowId, { focused: true }); }
         else if (m.type === "tab-close") await chrome.tabs.remove(Number(m.id));
         else if (m.type === "tab-move") await tabMove(Number(m.id), m.name);
+        else if (m.type === "tabs-shimau") await shimau();
         else await groupAct(m.type, Number(m.id));
       } catch (err) { done(false, "タブを動かせませんでした：" + String(err && err.message || err).slice(0, 120)); }
       return;
