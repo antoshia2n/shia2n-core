@@ -9,6 +9,11 @@
  *   tabs-open：今のウィンドウで、もう開いているチャットはそのタブを、無ければ新しいタブを開き、1 つのまとまりにする
  *   tabs-collapse：その名前のまとまりを折りたたむ ／ tabs-close：その名前のまとまりのタブを閉じる
  *   開くのは Claude と ChatGPT のチャットの住所だけ（ほかの住所は受けない）
+ * 1.14.0（2026-11-22 7便目）：タブ管理
+ *   tabs-open：保存したタブ（チャット以外も・http(s) だけ・40 本まで）も開く。まとまりの色は作業の状態の色
+ *   tabs-close・group-close：閉じる前に、まとまりの中身を作業へ写す（background.js の mk-save-group）
+ *   tabs-list：このウィンドウのまとまりと、どこにも入っていないタブを画面へ返す（変わるたびに送り直す）
+ *   group-expand・group-collapse・tab-focus・tab-close・tab-move（作業の名前のまとまりへ入れる）・tabs-paint（作業の色で塗る）
  */
 (() => {
   const ORIGINS = ["https://manager.shia2n.jp", "https://shia2n-mcp.gameister1.workers.dev"];
@@ -26,25 +31,29 @@
   // 同じチャットかは会話の番号で比べる（ChatGPT はプロジェクトの住所の形が変わるため）
   const chatId = (u) => { const m = String(u || "").match(/\/(?:chat|c)\/([A-Za-z0-9-]{8,})/); return m ? m[1] : String(u || "").split("#")[0]; };
   const done = (ok, message) => post({ type: "tabs-done", ok, message });
-  async function win() { return chrome.windows.getLastFocused({ windowTypes: ["normal"] }); }
+  // このパネルがついているウィンドウ（取れなければ最後に使ったウィンドウ）
+  async function win() { try { const w = await chrome.windows.getCurrent(); if (w && w.type === "normal") return w; } catch {} return chrome.windows.getLastFocused({ windowTypes: ["normal"] }); }
+  const COLORS = ["grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"];
+  const key = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
+  const saveGroup = (groupId) => chrome.runtime.sendMessage({ type: "mk-save-group", groupId }).catch(() => null);
   async function groupsNamed(title, windowId) { return (await chrome.tabGroups.query({ windowId })).filter((g) => g.title === title); }
-  async function tabsOpen(name, urls) {
+  async function tabsOpen(name, urls, color) {
     const title = String(name || "").slice(0, 40);
-    const list = [...new Set((Array.isArray(urls) ? urls : []).map(String).filter((u) => CHAT_URL.test(u)))].slice(0, 20);
-    if (!title || !list.length) return done(false, "開けるチャットの住所がありません");
+    const list = [...new Set((Array.isArray(urls) ? urls : []).map(String).filter((u) => /^https?:\/\/[^\s]+$/.test(u)))].slice(0, 40);
+    if (!title || !list.length) return done(false, "開ける住所がありません");
     const w = await win();
     const have = await chrome.tabs.query({ windowId: w.id });
     const ids = [];
     for (const u of list) {
-      const hit = have.find((t) => t.url && chatId(t.url) === chatId(u));
+      const hit = have.find((t) => t.url && (CHAT_URL.test(u) ? chatId(t.url) === chatId(u) : t.url === u));
       if (hit) ids.push(hit.id);
       else ids.push((await chrome.tabs.create({ url: u, active: false, windowId: w.id })).id);
     }
     const g = (await groupsNamed(title, w.id))[0];
     const gid = await chrome.tabs.group(g ? { tabIds: ids, groupId: g.id } : { tabIds: ids, createProperties: { windowId: w.id } });
-    await chrome.tabGroups.update(gid, { title, collapsed: false, color: "red" });
+    await chrome.tabGroups.update(gid, { title, collapsed: false, color: COLORS.includes(color) ? color : "red" });
     await chrome.tabs.update(ids[0], { active: true });
-    done(true, `「${title}」のチャット ${ids.length} 本をタブで開きました`);
+    done(true, `「${title}」のタブを ${ids.length} 本開きました`);
   }
   async function tabsCollapse(name) {
     const w = await win(); const gs = await groupsNamed(String(name || "").slice(0, 40), w.id);
@@ -56,9 +65,45 @@
     const w = await win(); const gs = await groupsNamed(String(name || "").slice(0, 40), w.id);
     if (!gs.length) return done(false, "この作業のタブのまとまりは開いていません");
     let n = 0;
-    for (const g of gs) { const ts = await chrome.tabs.query({ groupId: g.id }); n += ts.length; if (ts.length) await chrome.tabs.remove(ts.map((t) => t.id)); }
-    done(true, `タブを ${n} 本閉じました`);
+    for (const g of gs) { await saveGroup(g.id); const ts = await chrome.tabs.query({ groupId: g.id }); n += ts.length; if (ts.length) await chrome.tabs.remove(ts.map((t) => t.id)); }
+    done(true, `タブを ${n} 本保存して閉じました。作業の「タブで開く」で戻せます`);
   }
+
+  // 1.14.0：このウィンドウのまとまりと、どこにも入っていないタブ
+  async function tabsList() {
+    const w = await win();
+    const [gs, ts] = await Promise.all([chrome.tabGroups.query({ windowId: w.id }), chrome.tabs.query({ windowId: w.id })]);
+    const first = new Map();
+    for (const t of ts) if (t.groupId !== -1 && !first.has(t.groupId)) first.set(t.groupId, t.index);
+    const groups = gs.map((g) => ({ id: g.id, title: g.title || "", color: g.color, collapsed: g.collapsed, count: ts.filter((t) => t.groupId === g.id).length }))
+      .sort((a, b) => (first.get(a.id) ?? 0) - (first.get(b.id) ?? 0));
+    const loose = ts.filter((t) => t.groupId === -1 && !t.pinned && /^https?:\/\//.test(t.url || "")).map((t) => ({ id: t.id, title: (t.title || "").slice(0, 120), url: t.url }));
+    post({ type: "tabs-list", groups, loose });
+  }
+  let listT = null;
+  const listSoon = () => { clearTimeout(listT); listT = setTimeout(() => tabsList().catch(() => {}), 400); };
+  async function groupAct(type, id) {
+    const g = await chrome.tabGroups.get(id);
+    if (type === "group-expand") { await chrome.tabGroups.update(id, { collapsed: false }); const [t] = await chrome.tabs.query({ groupId: id }); if (t) await chrome.tabs.update(t.id, { active: true }); return; }
+    if (type === "group-collapse") return void await chrome.tabGroups.update(id, { collapsed: true });
+    if (g.title) await saveGroup(id);
+    const ts = await chrome.tabs.query({ groupId: id });
+    if (ts.length) await chrome.tabs.remove(ts.map((t) => t.id));
+    done(true, g.title ? `「${g.title}」を保存して閉じました` : "閉じました");
+  }
+  async function tabMove(id, name) {
+    const title = String(name || "").slice(0, 80);
+    const tab = await chrome.tabs.get(id);
+    const g = (await chrome.tabGroups.query({ windowId: tab.windowId })).find((x) => key(x.title) === key(title));
+    if (g) await chrome.tabs.group({ tabIds: [id], groupId: g.id });
+    else { const gid = await chrome.tabs.group({ tabIds: [id], createProperties: { windowId: tab.windowId } }); await chrome.tabGroups.update(gid, { title, color: "green" }); }
+    done(true, `「${title}」に入れました`);
+  }
+  async function paint(items) {
+    const want = new Map((Array.isArray(items) ? items : []).filter((x) => x && COLORS.includes(x.color)).map((x) => [key(x.name), x.color]));
+    for (const g of await chrome.tabGroups.query({})) { const c = want.get(key(g.title)); if (c && g.color !== c) await chrome.tabGroups.update(g.id, { color: c }); }
+  }
+  for (const ev of [chrome.tabs.onCreated, chrome.tabs.onRemoved, chrome.tabs.onUpdated, chrome.tabs.onMoved, chrome.tabs.onAttached, chrome.tabs.onDetached, chrome.tabGroups.onCreated, chrome.tabGroups.onUpdated, chrome.tabGroups.onRemoved]) ev.addListener(listSoon);
 
   addEventListener("message", async (e) => {
     const f = frame();
@@ -78,9 +123,19 @@
         else post({ type: "tab-current", ok: false, message: "今のタブは Claude か ChatGPT のチャットではありません" });
       } catch (err) { post({ type: "tab-current", ok: false, message: "今のタブを読めませんでした" }); }
       return;
+    } else if (["tabs-list", "group-expand", "group-collapse", "group-close", "tab-focus", "tab-close", "tab-move", "tabs-paint"].includes(m.type)) {
+      try {
+        if (m.type === "tabs-list") await tabsList();
+        else if (m.type === "tabs-paint") await paint(m.items);
+        else if (m.type === "tab-focus") { const t = await chrome.tabs.update(Number(m.id), { active: true }); await chrome.windows.update(t.windowId, { focused: true }); }
+        else if (m.type === "tab-close") await chrome.tabs.remove(Number(m.id));
+        else if (m.type === "tab-move") await tabMove(Number(m.id), m.name);
+        else await groupAct(m.type, Number(m.id));
+      } catch (err) { done(false, "タブを動かせませんでした：" + String(err && err.message || err).slice(0, 120)); }
+      return;
     } else if (m.type === "tabs-open" || m.type === "tabs-collapse" || m.type === "tabs-close") {
       try {
-        if (m.type === "tabs-open") await tabsOpen(m.name, m.urls);
+        if (m.type === "tabs-open") await tabsOpen(m.name, m.urls, m.color);
         else if (m.type === "tabs-collapse") await tabsCollapse(m.name);
         else await tabsClose(m.name);
       } catch (err) { done(false, "タブを動かせませんでした：" + String(err && err.message || err).slice(0, 120)); }

@@ -9,6 +9,10 @@
  *   箱の番号（data-turn-key）を一緒に送り、マネージャーくんが前に受けた分と足し合わせる（ChatGPT は画面に出ている往復しか描かないため）。
  * 1.11.0（2026-11-22 4便目）：チャットが入っているプロジェクトの名前も送る（マネージャーくんの分野の棚になる）。
  *   Claude は上部のプロジェクトへのリンク（/project/…）、ChatGPT は上部の「プロジェクト: ○○」の印。プロジェクトの外なら送らない。
+ * 1.14.0（2026-11-22 7便目）：誰の番。
+ *   ・AI が書き始めたら（止めるボタンが出たら）「AI が作業中」の合図を 1 回送る
+ *   ・読んだ全文を送るとき、そのタブを見ているか（seen）を添える。見ていないうちに返事が来たら「返事が来た」になる
+ *   ・あとでそのタブを見たら「見た」の合図を送る（返事が来た → Naoki の番）
  */
 (() => {
   const QUIET_MS = 5000;
@@ -88,12 +92,37 @@
     if (url === lastUrl && s === lastSig) return;
     const title = document.title.replace(/\s*[-|]\s*(ChatGPT|Claude)\s*$/, "").trim();
     try {
-      const r = await chrome.runtime.sendMessage({ type: "mk-capture", payload: { url, title, turns, ...(proj ? { project: proj } : {}) } });
+      const r = await chrome.runtime.sendMessage({ type: "mk-capture", payload: { url, title, turns, seen: seen(), ...(proj ? { project: proj } : {}) } });
       if (r && r.ok) { lastUrl = url; lastSig = s; }
     } catch { /* 背景が眠っていれば次の変化でまた送る */ }
   }
 
-  function arm() { clearTimeout(timer); timer = setTimeout(tick, QUIET_MS); }
+  function arm() { clearTimeout(timer); timer = setTimeout(tick, QUIET_MS); checkBusySoon(); }
+
+  // 1.14.0：誰の番の合図（台帳に無いチャットはマネージャーくんの側で何もしない）
+  const seen = () => document.visibilityState === "visible";
+  let aiUrl = "", busyT = null, seenAt = 0;
+  async function ping(kind) {
+    try {
+      if (!(await chrome.storage.local.get("mk_key")).mk_key) return;
+      await chrome.runtime.sendMessage({ type: "mk-turn", payload: { url: location.href, kind } });
+    } catch { /* 拡張を入れ替えた直後など */ }
+  }
+  function checkBusySoon() {
+    if (busyT) return;
+    busyT = setTimeout(() => {
+      busyT = null;
+      if (!CHAT.test(location.href)) return;
+      if (busy()) { if (aiUrl !== location.href) { aiUrl = location.href; ping("AI"); } }
+      else if (aiUrl === location.href) aiUrl = "";
+    }, 2000);
+  }
+  function onSeen() {
+    if (!seen() || !CHAT.test(location.href) || Date.now() - seenAt < 20000) return;
+    seenAt = Date.now(); ping("seen");
+  }
+  document.addEventListener("visibilitychange", onSeen);
+  addEventListener("focus", onSeen);
   new MutationObserver(arm).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
   arm();
 })();
