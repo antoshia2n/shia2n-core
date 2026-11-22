@@ -72,14 +72,16 @@
     await chrome.tabs.update(ids[0], { active: true });
     done(true, `「${title}」のタブを ${ids.length} 本開きました`);
   }
+  // 1.16.1：たたむ・閉じるは、どのウィンドウにあるまとまりでも
+  const groupsAny = async (name) => { const t = String(name || "").slice(0, 40); return (await chrome.tabGroups.query({})).filter((g) => g.title === t); };
   async function tabsCollapse(name) {
-    const w = await win(); const gs = await groupsNamed(String(name || "").slice(0, 40), w.id);
+    const gs = await groupsAny(name);
     if (!gs.length) return done(false, "この作業のタブのまとまりは開いていません");
     for (const g of gs) await chrome.tabGroups.update(g.id, { collapsed: true });
     done(true, "たたみました");
   }
   async function tabsClose(name) {
-    const w = await win(); const gs = await groupsNamed(String(name || "").slice(0, 40), w.id);
+    const gs = await groupsAny(name);
     if (!gs.length) return done(false, "この作業のタブのまとまりは開いていません");
     let n = 0;
     for (const g of gs) { await saveGroup(g.id); const ts = await chrome.tabs.query({ groupId: g.id }); n += ts.length; if (ts.length) await chrome.tabs.remove(ts.map((t) => t.id)); }
