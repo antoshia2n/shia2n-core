@@ -18,6 +18,9 @@
  *   do-work：その作業のまとまりを開いて前に出し（無ければ保存したタブとチャットで開く）、focus のチャットのタブを選ぶ。ほかのまとまりはたたむ
  *   tab-go：そのチャットのタブへ飛ぶ（どのウィンドウでも。無ければ新しいタブで開く）
  *   背景から「台帳が変わった」（mk-changed）が来たら、画面へ refresh を送る
+ * 1.15.1（2026-11-22）：ウィンドウを何枚も開いているとき
+ *   作業のまとまりがほかのウィンドウで開いていれば、そのウィンドウを前に出してそこで動かす（同じタブを二重に開かない）
+ *   チャットのタブがほかのウィンドウにあれば、新しく開かずにそのタブをまとまりへ移す
  */
 (() => {
   const ORIGINS = ["https://manager.shia2n.jp", "https://shia2n-mcp.gameister1.workers.dev"];
@@ -41,15 +44,22 @@
   const key = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
   const saveGroup = (groupId) => chrome.runtime.sendMessage({ type: "mk-save-group", groupId }).catch(() => null);
   async function groupsNamed(title, windowId) { return (await chrome.tabGroups.query({ windowId })).filter((g) => g.title === title); }
+  // 1.15.1：その名前のまとまりがどこかのウィンドウで開いていれば、そのウィンドウ。無ければこのパネルのウィンドウ
+  async function winFor(title) {
+    const any = (await chrome.tabGroups.query({})).find((g) => g.title === title);
+    const w = any ? await chrome.windows.get(any.windowId) : await win();
+    if (any) await chrome.windows.update(w.id, { focused: true }).catch(() => {});
+    return w;
+  }
   async function tabsOpen(name, urls, color) {
     const title = String(name || "").slice(0, 40);
     const list = [...new Set((Array.isArray(urls) ? urls : []).map(String).filter((u) => /^https?:\/\/[^\s]+$/.test(u)))].slice(0, 40);
     if (!title || !list.length) return done(false, "開ける住所がありません");
-    const w = await win();
-    const have = await chrome.tabs.query({ windowId: w.id });
+    const w = await winFor(title);
+    const have = await chrome.tabs.query({});
     const ids = [];
     for (const u of list) {
-      const hit = have.find((t) => t.url && (CHAT_URL.test(u) ? chatId(t.url) === chatId(u) : t.url === u));
+      const hit = have.find((t) => t.url && (t.windowId === w.id || t.groupId === -1) && (CHAT_URL.test(u) ? chatId(t.url) === chatId(u) : t.url === u));
       if (hit) ids.push(hit.id);
       else ids.push((await chrome.tabs.create({ url: u, active: false, windowId: w.id })).id);
     }
@@ -77,7 +87,7 @@
   const same = (a, b) => CHAT_URL.test(a || "") && CHAT_URL.test(b || "") ? chatId(a) === chatId(b) : String(a || "").split("#")[0] === String(b || "").split("#")[0];
   async function doWork(name, urls, color, focus) {
     const title = String(name || "").slice(0, 40);
-    const w = await win();
+    const w = await winFor(title);
     let g = (await groupsNamed(title, w.id))[0];
     if (!g) {
       await tabsOpen(title, urls, color);
@@ -86,8 +96,13 @@
     } else {
       // 開いているまとまりに、まだ無いチャットだけ足す
       const have = await chrome.tabs.query({ groupId: g.id });
+      const all = await chrome.tabs.query({});
       const add = [];
-      for (const u of (Array.isArray(urls) ? urls : []).map(String).filter((u) => CHAT_URL.test(u)).slice(0, 20)) if (!have.some((t) => same(t.url, u))) add.push((await chrome.tabs.create({ url: u, active: false, windowId: w.id })).id);
+      for (const u of (Array.isArray(urls) ? urls : []).map(String).filter((u) => CHAT_URL.test(u)).slice(0, 20)) {
+        if (have.some((t) => same(t.url, u))) continue;
+        const elsewhere = all.find((t) => same(t.url, u) && t.groupId === -1); // まとまりに入っていないタブだけ移す（ほかの作業のタブは取らない）
+        add.push(elsewhere ? elsewhere.id : (await chrome.tabs.create({ url: u, active: false, windowId: w.id })).id);
+      }
       if (add.length) await chrome.tabs.group({ tabIds: add, groupId: g.id });
       await chrome.tabGroups.update(g.id, { collapsed: false });
     }
