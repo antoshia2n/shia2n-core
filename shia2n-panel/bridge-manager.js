@@ -24,6 +24,10 @@
  * 1.16.0（2026-11-22）：1 つのパネルで全部のウィンドウを扱う
  *   tabs-list はウィンドウごとに返す（画面の左からの位置で 左・真ん中・右。このパネルのウィンドウに印）
  *   group-here：そのまとまりを、このパネルのウィンドウへまとめて移す
+ * 1.17.0（2026-11-22 12便目）：タブの画面をフォルダの木に
+ *   tabs-list のまとまりに中のタブ（id・題・住所）も添える
+ *   group-new：新しいタブ 1 本でまとまりを作る（作業を先に作って、あとからページを足す）
+ *   tab-move-active：このパネルのウィンドウで今見ているタブを、その名前のまとまりへ入れる
  */
 (() => {
   const ORIGINS = ["https://manager.shia2n.jp", "https://shia2n-mcp.gameister1.workers.dev"];
@@ -138,7 +142,7 @@
       const [gs, ts] = await Promise.all([chrome.tabGroups.query({ windowId: w.id }), chrome.tabs.query({ windowId: w.id })]);
       const first = new Map();
       for (const t of ts) if (t.groupId !== -1 && !first.has(t.groupId)) first.set(t.groupId, t.index);
-      const groups = gs.map((g) => ({ id: g.id, title: g.title || "", color: g.color, collapsed: g.collapsed, count: ts.filter((t) => t.groupId === g.id).length }))
+      const groups = gs.map((g) => { const in_ = ts.filter((t) => t.groupId === g.id).sort((a, b) => a.index - b.index); return { id: g.id, title: g.title || "", color: g.color, collapsed: g.collapsed, count: in_.length, tabs: in_.slice(0, 40).map((t) => ({ id: t.id, title: (t.title || "").slice(0, 120), url: t.url || t.pendingUrl || "" })) }; })
         .sort((a, b) => (first.get(a.id) ?? 0) - (first.get(b.id) ?? 0));
       const loose = ts.filter((t) => t.groupId === -1 && !t.pinned && /^https?:\/\//.test(t.url || "")).slice(0, 40).map((t) => ({ id: t.id, title: (t.title || "").slice(0, 120), url: t.url }));
       out.push({ id: w.id, name: names[i], here: w.id === me.id, groups, loose });
@@ -159,10 +163,25 @@
     if (ts.length) await chrome.tabs.remove(ts.map((t) => t.id));
     done(true, g.title ? `「${g.title}」を保存して閉じました` : "閉じました");
   }
+  async function groupNew(name, color) {
+    const title = String(name || "").slice(0, 40);
+    if (!title) return done(false, "作業の名前がありません");
+    const w = await win();
+    const t = await chrome.tabs.create({ windowId: w.id, active: true });
+    const gid = await chrome.tabs.group({ tabIds: [t.id], createProperties: { windowId: w.id } });
+    await chrome.tabGroups.update(gid, { title, color: COLORS.includes(color) ? color : "green", collapsed: false });
+    done(true, `「${title}」のまとまりを作りました。ページを開いて足していけます`);
+  }
+  async function tabMoveActive(name) {
+    const w = await win();
+    const [t] = await chrome.tabs.query({ active: true, windowId: w.id });
+    if (!t || !/^https?:\/\//.test(t.url || "")) return done(false, "今見ているタブはページではありません");
+    await tabMove(t.id, name);
+  }
   async function tabMove(id, name) {
     const title = String(name || "").slice(0, 80);
     const tab = await chrome.tabs.get(id);
-    const g = (await chrome.tabGroups.query({ windowId: tab.windowId })).find((x) => key(x.title) === key(title));
+    const g = (await chrome.tabGroups.query({ windowId: tab.windowId })).find((x) => key(x.title) === key(title)) || (await chrome.tabGroups.query({})).find((x) => key(x.title) === key(title));
     if (g) await chrome.tabs.group({ tabIds: [id], groupId: g.id });
     else { const gid = await chrome.tabs.group({ tabIds: [id], createProperties: { windowId: tab.windowId } }); await chrome.tabGroups.update(gid, { title, color: "green" }); }
     done(true, `「${title}」に入れました`);
@@ -195,9 +214,11 @@
       try { if (m.type === "do-work") await doWork(m.name, m.urls, m.color, m.focus); else await tabGo(m.url); }
       catch (err) { done(false, "タブを動かせませんでした：" + String(err && err.message || err).slice(0, 120)); }
       return;
-    } else if (["tabs-list", "group-expand", "group-collapse", "group-close", "group-here", "tab-focus", "tab-close", "tab-move", "tabs-paint"].includes(m.type)) {
+    } else if (["tabs-list", "group-new", "tab-move-active", "group-expand", "group-collapse", "group-close", "group-here", "tab-focus", "tab-close", "tab-move", "tabs-paint"].includes(m.type)) {
       try {
         if (m.type === "tabs-list") await tabsList();
+        else if (m.type === "group-new") await groupNew(m.name, m.color);
+        else if (m.type === "tab-move-active") await tabMoveActive(m.name);
         else if (m.type === "tabs-paint") await paint(m.items);
         else if (m.type === "tab-focus") { const t = await chrome.tabs.update(Number(m.id), { active: true }); await chrome.windows.update(t.windowId, { focused: true }); }
         else if (m.type === "tab-close") await chrome.tabs.remove(Number(m.id));
