@@ -13,6 +13,7 @@
  *   ・AI が書き始めたら（止めるボタンが出たら）「AI が作業中」の合図を 1 回送る
  *   ・読んだ全文を送るとき、そのタブを見ているか（seen）を添える。見ていないうちに返事が来たら「返事が来た」になる
  *   ・あとでそのタブを見たら「見た」の合図を送る（返事が来た → Naoki の番）
+ * 1.15.0（2026-11-22 8便目）：見ていない間に AI が書き終わったら、背景へ知らせる（Chrome の通知とアイコンの数）
  */
 (() => {
   const QUIET_MS = 5000;
@@ -114,14 +115,21 @@
       busyT = null;
       if (!CHAT.test(location.href)) return;
       if (busy()) { if (aiUrl !== location.href) { aiUrl = location.href; ping("AI"); } }
-      else if (aiUrl === location.href) aiUrl = "";
+      else if (aiUrl === location.href) { aiUrl = ""; if (!seen()) notifyDone(); }
     }, 2000);
+  }
+  async function notifyDone() {
+    try {
+      if (!(await chrome.storage.local.get("mk_key")).mk_key) return;
+      const title = document.title.replace(/\s*[-|]\s*(ChatGPT|Claude)\s*$/, "").trim();
+      await chrome.runtime.sendMessage({ type: "mk-done-unseen", title, service });
+    } catch {}
   }
   function onSeen() {
     if (!seen() || !CHAT.test(location.href) || Date.now() - seenAt < 20000) return;
     seenAt = Date.now(); ping("seen");
   }
-  document.addEventListener("visibilitychange", onSeen);
+  document.addEventListener("visibilitychange", () => { if (seen()) chrome.runtime.sendMessage({ type: "mk-seen-local" }).catch(() => {}); onSeen(); });
   addEventListener("focus", onSeen);
   new MutationObserver(arm).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
   arm();
