@@ -138,9 +138,10 @@ chrome.tabs.onMoved.addListener((tabId, info) => syncWindowSoon(info.windowId));
 chrome.tabs.onAttached.addListener((tabId, info) => syncWindowSoon(info.newWindowId));
 chrome.tabGroups.onUpdated.addListener((g) => syncWindowSoon(g.windowId));
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (!msg || msg.type !== "mk-save-group") return;
-  saveGroup(Number(msg.groupId), true).then(sendResponse);
-  return true;
+  if (!msg) return;
+  if (msg.type === "mk-save-group") { saveGroup(Number(msg.groupId), true).then(sendResponse); return true; }
+  // 1.18.0：「全部しまう」の受け箱（まとまりに入っていないタブ）を、前の分に足して写す
+  if (msg.type === "mk-save-tabs") { mkPost("/manager/ext/tabs", { group: String(msg.group || ""), tabs: msg.tabs || [], add: true }).then((b) => sendResponse(b || { ok: false })).catch((e) => sendResponse({ ok: false, message: String(e && e.message || e) })); return true; }
 });
 
 /* 1.15.0（2026-11-22 マネージャーくん 8便目）：通知・アイコンの数・読み取りの入れ直し
