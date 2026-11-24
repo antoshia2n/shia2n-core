@@ -134,3 +134,56 @@
   new MutationObserver(arm).observe(document.documentElement, { childList: true, subtree: true, characterData: true });
   arm();
 })();
+
+/* 1.19.0（マネージャーくん v1.150.2）：ピンのリンクで開いたら、そのピンの出力まで動かして数秒光らせる
+ *   住所の #mkpin-チャット-ピン（Claude や ChatGPT が住所から消しても、background が開いたときに覚えている） */
+(function () {
+  const norm = (t) => String(t || "").replace(/[#*`>|_~\-]+/g, " ").replace(/\s+/g, "").toLowerCase();
+  function keys(body) {
+    const lines = String(body || "").split(/\n+/).map((l) => norm(l)).filter((l) => l.length >= 8);
+    const out = [];
+    if (lines[0]) out.push(lines[0].slice(0, 40));
+    if (lines.length > 2) out.push(lines[Math.floor(lines.length / 2)].slice(0, 40));
+    if (lines.length > 1) out.push(lines[lines.length - 1].slice(0, 40));
+    return out;
+  }
+  const SEL = '.font-claude-response, .font-claude-message, [data-testid="assistant-message"], [data-testid="user-message"], [data-message-author-role]';
+  function find(ks) {
+    const els = [...document.querySelectorAll(SEL)].filter((el, _, all) => !all.some((o) => o !== el && el.contains(o) && o.matches(SEL)));
+    for (const el of els) { const t = norm(el.innerText); if (ks.length && ks.filter((k) => t.includes(k)).length >= Math.min(2, ks.length)) return el; }
+    for (const el of els) { const t = norm(el.innerText); if (ks[0] && t.includes(ks[0])) return el; }
+    return null;
+  }
+  function scroller(el) { let p = el && el.parentElement; while (p && p !== document.body) { const s = getComputedStyle(p); if (/(auto|scroll)/.test(s.overflowY) && p.scrollHeight > p.clientHeight) return p; p = p.parentElement; } return document.scrollingElement; }
+  function note(msg) {
+    const d = document.createElement("div");
+    d.textContent = msg;
+    d.style.cssText = "position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:2147483647;background:#2b2823;color:#f1ece6;font:13px/1.5 system-ui,sans-serif;padding:8px 14px;border-radius:10px;box-shadow:0 8px 20px rgba(0,0,0,.25)";
+    document.body.appendChild(d); setTimeout(() => d.remove(), 3500);
+  }
+  async function run() {
+    let m = location.hash.match(/^#mkpin-(\d+)-(\d+)$/);
+    if (!m) { const r = await chrome.runtime.sendMessage({ type: "mk-pin-take" }).catch(() => null); if (r && r.chat) m = [null, r.chat, r.n]; }
+    if (!m) return;
+    const b = await chrome.runtime.sendMessage({ type: "mk-pin", chat: Number(m[1]), n: Number(m[2]) }).catch(() => null);
+    if (!b || !b.ok) { note("ピンを読めませんでした（拡張機能をつないでください）"); return; }
+    try { if (/^#mkpin-/.test(location.hash)) history.replaceState(history.state, "", location.pathname + location.search); } catch {}
+    const ks = keys(b["中身"]);
+    const t0 = Date.now(); let ups = 0;
+    while (Date.now() - t0 < 30000) {
+      const el = find(ks);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        const prev = el.style.outline; el.style.outline = "3px solid #f59e0b"; el.style.outlineOffset = "4px"; el.style.borderRadius = el.style.borderRadius || "8px";
+        setTimeout(() => { el.style.outline = prev; }, 3500);
+        note(`ピン「${b["題"]}」`);
+        return;
+      }
+      // 古い出力がまだ読み込まれていなければ、上へ動かして読み込ませる（6 秒たってから・10 回まで）
+      if (Date.now() - t0 > 6000 && ups < 10) { const any = document.querySelector(SEL); const sc = scroller(any); if (sc) { sc.scrollTop = 0; ups++; } }
+      await new Promise((r) => setTimeout(r, 800));
+    }
+    note("ピンの位置が見つかりませんでした");
+  }
+  run();
+})();

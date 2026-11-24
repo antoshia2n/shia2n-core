@@ -141,6 +141,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg) return;
   if (msg.type === "mk-save-group") { saveGroup(Number(msg.groupId), true).then(sendResponse); return true; }
   // 1.18.0：「全部しまう」の受け箱（まとまりに入っていないタブ）を、前の分に足して写す
+  // 1.19.0：ピンのリンクで開いたタブ（住所の #mkpin- を覚えておき、チャットの画面が聞きに来たら渡す）
+  if (msg.type === "mk-pin-take") { const id = sender && sender.tab && sender.tab.id; const p = pinPend.get(id); pinPend.delete(id); sendResponse(p && Date.now() - p.at < 90000 ? p : null); return; }
+  if (msg.type === "mk-pin") { mkPost("/manager/ext/pin", { chat: msg.chat, n: msg.n }).then((b) => sendResponse(b || { ok: false })).catch(() => sendResponse({ ok: false })); return true; }
   if (msg.type === "mk-save-tabs") { mkPost("/manager/ext/tabs", { group: String(msg.group || ""), tabs: msg.tabs || [], add: true }).then((b) => sendResponse(b || { ok: false })).catch((e) => sendResponse({ ok: false, message: String(e && e.message || e) })); return true; }
 });
 
@@ -185,3 +188,8 @@ chrome.runtime.onInstalled.addListener(async () => {
     for (const t of tabs) chrome.scripting.executeScript({ target: { tabId: t.id }, files: ["capture.js"] }).catch(() => {});
   } catch {}
 });
+
+/* 1.19.0：ピンのリンク（#mkpin-チャット-ピン）で開いたタブを覚える。Claude や ChatGPT が住所から消しても位置へ動かせるように */
+const pinPend = new Map();
+chrome.tabs.onUpdated.addListener((tabId, info) => { const m = info.url && info.url.match(/#mkpin-(\d+)-(\d+)$/); if (m) pinPend.set(tabId, { chat: Number(m[1]), n: Number(m[2]), at: Date.now() }); });
+chrome.tabs.onRemoved.addListener((tabId) => pinPend.delete(tabId));
