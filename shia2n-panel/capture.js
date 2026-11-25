@@ -106,7 +106,10 @@
   async function ping(kind) {
     try {
       if (!(await chrome.storage.local.get("mk_key")).mk_key) return;
-      await chrome.runtime.sendMessage({ type: "mk-turn", payload: { url: location.href, kind } });
+      // 1.20.0：答え始めの合図に、そのときの回答の数（と ChatGPT の回答の印）を載せる。ピンを付けた回答を決めるため
+      let extra = {};
+      if (kind === "AI") { try { const ts = read(); extra = { turns: ts.length, key: (ts[ts.length - 1] || {}).k || null }; } catch {} }
+      await chrome.runtime.sendMessage({ type: "mk-turn", payload: { url: location.href, kind, ...extra } });
     } catch { /* 拡張を入れ替えた直後など */ }
   }
   function checkBusySoon() {
@@ -170,8 +173,19 @@
     try { if (/^#mkpin-/.test(location.hash)) history.replaceState(history.state, "", location.pathname + location.search); } catch {}
     const ks = keys(b["中身"]);
     const t0 = Date.now(); let ups = 0;
+    // 1.20.0：まず回答の印（ChatGPT）か、何番目の回答かで探す。だめなら同じ文で探す
+    const byTurn = () => {
+      if (b["印"]) { const box = document.querySelector(`[data-turn-key="${CSS.escape(b["印"])}"]`); if (box) return box.querySelector("[data-response-body]") || box; }
+      const n = Number(b["回答番号"]); if (!n) return null;
+      const boxes = [...document.querySelectorAll("main [data-turn-key]")];
+      if (boxes.length) { const box = boxes[n - 1]; return box ? (box.querySelector("[data-response-body]") || box) : null; }
+      const us = [...document.querySelectorAll('[data-testid="user-message"], [data-message-author-role="user"]')];
+      const u = us[n - 1]; if (!u) return null;
+      const as = [...document.querySelectorAll('.font-claude-response, .font-claude-message, [data-testid="assistant-message"], [data-message-author-role="assistant"]')];
+      return as.find((a) => u.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) || null;
+    };
     while (Date.now() - t0 < 30000) {
-      const el = find(ks);
+      const el = byTurn() || find(ks);
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         const prev = el.style.outline; el.style.outline = "3px solid #f59e0b"; el.style.outlineOffset = "4px"; el.style.borderRadius = el.style.borderRadius || "8px";
