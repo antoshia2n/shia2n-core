@@ -201,3 +201,22 @@
   }
   run();
 })();
+
+/* 1.21.0：Naoki の番のチャットは、タブ名の頭に「● 」。ページが題を書き換えても付け直す */
+(function () {
+  const MARK = "● ";
+  let on = false, guard = false, hits = [], off = false;
+  function apply() {
+    if (guard || off) return; guard = true;
+    // ページと書き換え合いになったら（5 秒に 20 回）、このタブでは付けるのをやめる
+    const now = Date.now(); hits = hits.filter((x) => now - x < 5000); hits.push(now); if (hits.length > 20) { off = true; guard = false; return; }
+    try {
+      const t = document.title || "";
+      if (on && !t.startsWith(MARK)) document.title = MARK + t;
+      else if (!on && t.startsWith(MARK)) document.title = t.slice(MARK.length);
+    } finally { guard = false; }
+  }
+  chrome.runtime.onMessage.addListener((m) => { if (m && m.type === "mk-yours") { on = !!m.on; apply(); } });
+  const watch = () => { const el = document.querySelector("title"); if (el) new MutationObserver(apply).observe(el, { childList: true, characterData: true, subtree: true }); else setTimeout(watch, 1000); };
+  watch();
+})();

@@ -156,8 +156,7 @@ const MK_UNSEEN = "mk_unseen";
 async function unseen() { try { return (await chrome.storage.session.get(MK_UNSEEN))[MK_UNSEEN] || []; } catch { return []; } }
 async function setUnseen(list) {
   try { await chrome.storage.session.set({ [MK_UNSEEN]: list }); } catch {}
-  await chrome.action.setBadgeBackgroundColor({ color: "#ae5a5a" }).catch(() => {});
-  await chrome.action.setBadgeText({ text: list.length ? String(list.length) : "" }).catch(() => {});
+  // 1.21.0：アイコンの数は「Naoki の番」の数にした（refreshYours）。見ていない数は通知だけに使う
 }
 function mkChanged() { chrome.runtime.sendMessage({ type: "mk-changed" }).catch(() => {}); }
 chrome.runtime.onMessage.addListener((msg, sender) => {
@@ -174,6 +173,7 @@ chrome.runtime.onMessage.addListener((msg, sender) => {
     (async () => { const list = await unseen(); if (list.includes(tabId)) await setUnseen(list.filter((x) => x !== tabId)); chrome.notifications.clear("mk-tab-" + tabId); })();
   } else if (msg.type === "mk-capture" || msg.type === "mk-turn") {
     setTimeout(mkChanged, 1500);
+    setTimeout(refreshYours, 2500);
   }
 });
 chrome.notifications.onClicked.addListener(async (id) => {
@@ -193,3 +193,33 @@ chrome.runtime.onInstalled.addListener(async () => {
 const pinPend = new Map();
 chrome.tabs.onUpdated.addListener((tabId, info) => { const m = info.url && info.url.match(/#mkpin-(\d+)-(\d+)$/); if (m) pinPend.set(tabId, { chat: Number(m[1]), n: Number(m[2]), at: Date.now() }); });
 chrome.tabs.onRemoved.addListener((tabId) => pinPend.delete(tabId));
+
+/* 1.21.0（2026-11-26 マネージャーくん v1.150.6・Naoki「Naoki の番が目立たない・見逃す」）
+ *   ・アイコンの数＝Naoki の番のチャットの数（返事をするまで消えない）
+ *   ・Naoki の番のチャットのタブ名の頭に「● 」（capture.js が付け外しする）
+ *   ・1 分ごとと、チャットを読んだ・合図を送ったあとに、マネージャーくんへ聞き直す */
+function chatKey(u) {
+  try {
+    const x = new URL(u); const p = x.pathname.replace(/\/+$/, "");
+    if (x.hostname === "claude.ai") { const m = p.match(/^\/chat\/([0-9a-f-]{8,})$/i); return m ? "claude:" + m[1] : null; }
+    if (/chatgpt\.com$|chat\.openai\.com$/.test(x.hostname)) { const m = p.match(/\/c\/([A-Za-z0-9-]{8,})$/); return m ? "gpt:" + m[1] : null; }
+  } catch {}
+  return null;
+}
+let yoursBusy = false;
+async function refreshYours() {
+  if (yoursBusy) return; yoursBusy = true;
+  try {
+    const b = await mkPost("/manager/ext/yours", {});
+    if (!b || !b.ok) return;
+    const keys = new Set((b["住所"] || []).map(chatKey).filter(Boolean));
+    await chrome.action.setBadgeBackgroundColor({ color: "#b42318" }).catch(() => {});
+    await chrome.action.setBadgeText({ text: b["件数"] ? String(b["件数"]) : "" }).catch(() => {});
+    const tabs = await chrome.tabs.query({ url: ["https://claude.ai/*", "https://chatgpt.com/*", "https://chat.openai.com/*"] });
+    for (const t of tabs) { const k = chatKey(t.url || ""); chrome.tabs.sendMessage(t.id, { type: "mk-yours", on: !!(k && keys.has(k)) }).catch(() => {}); }
+  } catch {} finally { yoursBusy = false; }
+}
+chrome.alarms.create("mk-yours", { periodInMinutes: 1 });
+chrome.alarms.onAlarm.addListener((a) => { if (a.name === "mk-yours") refreshYours(); });
+chrome.runtime.onStartup.addListener(refreshYours);
+chrome.tabs.onUpdated.addListener((id, info, tab) => { if (info.status === "complete" && /^https:\/\/(claude\.ai|chatgpt\.com|chat\.openai\.com)\//.test((tab && tab.url) || "")) refreshYours(); });
