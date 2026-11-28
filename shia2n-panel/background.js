@@ -37,7 +37,7 @@ async function groupOf(tab) {
   try {
     if (!tab || tab.groupId === undefined || tab.groupId === -1) return {};
     const g = await chrome.tabGroups.get(tab.groupId);
-    const t = String((g && g.title) || "").trim();
+    const t = mkBare(String((g && g.title) || "").trim());
     return t ? { group: t.slice(0, 80) } : {};
   } catch { return {}; }
 }
@@ -75,7 +75,8 @@ chrome.tabGroups.onUpdated.addListener(async (g) => {
  *     まとまりが無くなった（閉じた・消した）ときは写さない（保存したタブを消さないため）
  *   ・mk-save-group：パネルの「閉じて保存」から、閉じる前にすぐ写す */
 const MK_COLORS = ["grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"];
-const mkKey = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
+const mkBare = (s) => String(s || "").replace(/^\s*◆\s*/, ""); // 1.22.0：保存済みの印は名前に入れない
+const mkKey = (s) => mkBare(s).replace(/\s+/g, "").toLowerCase();
 async function mkPost(path, body) {
   const { mk_key, mk_base } = await chrome.storage.local.get(["mk_key", "mk_base"]);
   if (!mk_key || !mk_base) return null;
@@ -102,7 +103,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 const mkSent = new Map(); // まとまりの番号 → 最後に送った中身
 async function groupTabs(groupId) {
   const g = await chrome.tabGroups.get(groupId);
-  const title = String((g && g.title) || "").trim();
+  const title = mkBare(String((g && g.title) || "").trim());
   if (!title) return null;
   const tabs = (await chrome.tabs.query({ groupId })).sort((a, b) => a.index - b.index)
     .filter((t) => /^https?:\/\//.test(t.url || t.pendingUrl || "")).slice(0, 40)
@@ -116,6 +117,7 @@ async function saveGroup(groupId, force) {
     const sig = x.title + "\n" + x.tabs.map((t) => t.url).join("\n");
     if (!force && mkSent.get(groupId) === sig) return { ok: true, same: true };
     const b = await mkPost("/manager/ext/tabs", { group: x.title, tabs: x.tabs });
+    if (b && b.ok && !b["外した"]) setTimeout(() => refreshYours(), 800);
     if (b && b.ok) { mkSent.set(groupId, sig); paintGroup(groupId, b["まとまり"]); }
     return b || { ok: false };
   } catch (e) { return { ok: false, message: String(e && e.message || e) }; }
@@ -217,6 +219,16 @@ async function refreshYours() {
     await chrome.action.setBadgeText({ text: b["件数"] ? String(b["件数"]) : "" }).catch(() => {});
     const tabs = await chrome.tabs.query({ url: ["https://claude.ai/*", "https://chatgpt.com/*", "https://chat.openai.com/*"] });
     for (const t of tabs) { const k = chatKey(t.url || ""); chrome.tabs.sendMessage(t.id, { type: "mk-yours", on: !!(k && keys.has(k)) }).catch(() => {}); }
+    // 1.22.0：保存済みのまとまりの名前の頭に「◆ 」。保存していないまとまりからは外す
+    if (Array.isArray(b["保存済み"])) {
+      const saved = new Set(b["保存済み"].map(mkKey));
+      for (const g of await chrome.tabGroups.query({})) {
+        if (!g.title) continue;
+        const base = mkBare(g.title).trim();
+        const want = saved.has(mkKey(base)) ? "◆ " + base : base;
+        if (want !== g.title) { mkGroupTitles.set(g.id, want); await chrome.tabGroups.update(g.id, { title: want }).catch(() => {}); }
+      }
+    }
   } catch {} finally { yoursBusy = false; }
 }
 chrome.alarms.create("mk-yours", { periodInMinutes: 1 });
