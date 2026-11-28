@@ -49,12 +49,14 @@
   // このパネルがついているウィンドウ（取れなければ最後に使ったウィンドウ）
   async function win() { try { const w = await chrome.windows.getCurrent(); if (w && w.type === "normal") return w; } catch {} return chrome.windows.getLastFocused({ windowTypes: ["normal"] }); }
   const COLORS = ["grey", "blue", "red", "yellow", "green", "pink", "purple", "cyan", "orange"];
-  const key = (s) => String(s || "").replace(/\s+/g, "").toLowerCase();
+  // 1.22.0：保存済みのまとまりは名前の頭に「◆ 」が付く。比べるときは外す
+  const bare = (s) => String(s || "").replace(/^\s*◆\s*/, "");
+  const key = (s) => bare(s).replace(/\s+/g, "").toLowerCase();
   const saveGroup = (groupId) => chrome.runtime.sendMessage({ type: "mk-save-group", groupId }).catch(() => null);
-  async function groupsNamed(title, windowId) { return (await chrome.tabGroups.query({ windowId })).filter((g) => g.title === title); }
+  async function groupsNamed(title, windowId) { return (await chrome.tabGroups.query({ windowId })).filter((g) => bare(g.title) === bare(title)); }
   // 1.15.1：その名前のまとまりがどこかのウィンドウで開いていれば、そのウィンドウ。無ければこのパネルのウィンドウ
   async function winFor(title) {
-    const any = (await chrome.tabGroups.query({})).find((g) => g.title === title);
+    const any = (await chrome.tabGroups.query({})).find((g) => bare(g.title) === bare(title));
     const w = any ? await chrome.windows.get(any.windowId) : await win();
     if (any) await chrome.windows.update(w.id, { focused: true }).catch(() => {});
     return w;
@@ -73,12 +75,13 @@
     }
     const g = (await groupsNamed(title, w.id))[0];
     const gid = await chrome.tabs.group(g ? { tabIds: ids, groupId: g.id } : { tabIds: ids, createProperties: { windowId: w.id } });
-    await chrome.tabGroups.update(gid, { title, collapsed: false, color: COLORS.includes(color) ? color : "red" });
+    const cur = await chrome.tabGroups.get(gid).catch(() => null);
+    await chrome.tabGroups.update(gid, { title: cur && bare(cur.title) === bare(title) && cur.title ? cur.title : title, collapsed: false, color: COLORS.includes(color) ? color : "red" });
     await chrome.tabs.update(ids[0], { active: true });
     done(true, `「${title}」のタブを ${ids.length} 本開きました`);
   }
   // 1.16.1：たたむ・閉じるは、どのウィンドウにあるまとまりでも
-  const groupsAny = async (name) => { const t = String(name || "").slice(0, 40); return (await chrome.tabGroups.query({})).filter((g) => g.title === t); };
+  const groupsAny = async (name) => { const t = String(name || "").slice(0, 40); return (await chrome.tabGroups.query({})).filter((g) => bare(g.title) === bare(t)); };
   async function tabsCollapse(name) {
     const gs = await groupsAny(name);
     if (!gs.length) return done(false, "この作業のタブのまとまりは開いていません");
